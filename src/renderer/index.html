@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Weather Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-theme="cloudy-day">
+    <div class="backdrop" aria-hidden="true"></div>
+
+    <header class="titlebar">
+      <div class="brand">
+        <img src="/logo.svg" alt="" width="20" height="20" />
+        <span>Weather Dashboard</span>
+      </div>
+
+      <div class="search" id="search">
+        <span class="search-icon" id="search-icon"></span>
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Search for a city"
+          autocomplete="off"
+          spellcheck="false"
+          role="combobox"
+          aria-label="Search for a city"
+          aria-autocomplete="list"
+          aria-expanded="false"
+          aria-controls="search-results"
+        />
+        <kbd class="search-hint">Ctrl K</kbd>
+        <ul id="search-results" class="search-results" role="listbox" hidden></ul>
+      </div>
+
+      <div class="titlebar-actions">
+        <div class="units" role="group" aria-label="Units">
+          <button type="button" data-units="metric" aria-pressed="true">°C</button>
+          <button type="button" data-units="imperial" aria-pressed="false">°F</button>
+        </div>
+        <button type="button" class="icon-button" id="settings-button" aria-label="Settings" title="Settings"
+          aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-sheet"></button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar" aria-label="Saved cities">
+        <section>
+          <h2 class="section-title">Favorites</h2>
+          <ul id="favorites" class="fav-list"></ul>
+          <p id="favorites-empty" class="muted small">Tap the star next to a city to save it here.</p>
+        </section>
+        <section>
+          <h2 class="section-title">
+            Recent
+            <button type="button" id="clear-recent" class="link-button" hidden>Clear</button>
+          </h2>
+          <ul id="recent" class="fav-list"></ul>
+          <p id="recent-empty" class="muted small">Cities you search for show up here.</p>
+        </section>
+      </aside>
+
+      <main id="main" class="content is-loading">
+        <div id="banner" class="banner" role="alert" hidden></div>
+
+        <section class="card hero" id="hero" aria-live="polite"></section>
+
+        <div class="grid-2">
+          <section class="card chart-card" aria-labelledby="rain-title">
+            <header class="card-header">
+              <h2 class="section-title" id="rain-title">Rain today</h2>
+            </header>
+            <p id="rain-summary" class="rain-summary"></p>
+            <div class="chart-wrap"><canvas id="rain-chart" aria-hidden="true"></canvas></div>
+            <table id="rain-data" class="sr-only"></table>
+          </section>
+
+          <section class="card chart-card" aria-labelledby="temp-title">
+            <header class="card-header">
+              <h2 class="section-title" id="temp-title">Temperature · next 24 hours</h2>
+              <span class="legend" aria-hidden="true">
+                <span><i class="swatch swatch-temp"></i>Temperature</span>
+                <span><i class="swatch swatch-feels"></i>Feels like</span>
+              </span>
+            </header>
+            <p id="temp-summary" class="temp-summary"></p>
+            <div class="chart-wrap"><canvas id="temp-chart" aria-hidden="true"></canvas></div>
+            <div id="temp-strip" class="hour-strip" aria-hidden="true"></div>
+            <table id="temp-data" class="sr-only"></table>
+          </section>
+        </div>
+
+        <section class="card">
+          <h2 class="section-title" id="forecast-title">7-day forecast</h2>
+          <div id="forecast" class="forecast" role="radiogroup" aria-labelledby="forecast-title"></div>
+        </section>
+
+        <footer class="footer">
+          <span class="updated"><span id="updated-text"></span>
+            <button type="button" class="button refresh" id="refresh">
+              <span class="refresh-icon" id="refresh-icon"></span><span>Refresh</span>
+            </button>
+          </span>
+          <span>Weather data by <a href="https://open-meteo.com/" target="_blank" rel="noreferrer">Open-Meteo.com</a></span>
+        </footer>
+      </main>
+    </div>
+
+    <!-- Settings panel: slides down from the top over a frosted backdrop. Empty for now;
+         sections are added in src/renderer/components/settings.ts (SETTINGS_SECTIONS). -->
+    <div class="settings" id="settings" hidden>
+      <div class="settings-scrim"></div>
+      <section class="settings-sheet" id="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
+        <header class="settings-header">
+          <h2 class="settings-title" id="settings-title">Settings</h2>
+          <button type="button" class="icon-button settings-close" aria-label="Close settings" title="Close"></button>
+        </header>
+        <div class="settings-sections" id="settings-sections"></div>
+      </section>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

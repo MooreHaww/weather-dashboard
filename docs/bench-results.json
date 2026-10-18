@@ -1,0 +1,25 @@
+{
+  "measuredAt": "2026-10-17T09:58:58.756Z",
+  "node": "v22.23.3",
+  "requests": 38,
+  "cache": {
+    "hits": 23,
+    "misses": 15,
+    "hitRate": 0.6052631578947368
+  },
+  "responseTimeMs": {
+    "cached": {
+      "count": 23,
+      "p50": 0.68,
+      "p95": 1.05,
+      "mean": 0.75
+    },
+    "uncached": {
+      "count": 15,
+      "p50": 46.74,
+      "p95": 207.71,
+      "mean": 66.09
+    }
+  },
+  "speedupP50": 68.7
+}

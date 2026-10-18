@@ -1,0 +1,38 @@
+# Builds a Windows installer: release/Weather Dashboard Setup <version>.exe
+appId: com.mhawwari.weatherdashboard
+productName: Weather Dashboard
+copyright: Copyright © 2026 Mohammad (Moore) Hawwari
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the compiled app goes into the package (no sources, tests or scripts).
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - '!dist/server/index.js'
+  - package.json
+
+asar: true
+compression: maximum
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: '${productName} Setup ${version}.${ext}'
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Weather Dashboard
+  uninstallDisplayName: Weather Dashboard
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  # Keep favorites/settings in %APPDATA% when uninstalling (the user can delete them).
+  deleteAppDataOnUninstall: false

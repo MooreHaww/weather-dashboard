@@ -1,0 +1,64 @@
+import { Router } from 'express';
+import { HttpError } from '../errors';
+import { toPlace, type Storage } from '../storage';
+
+function placeFromBody(body: unknown) {
+  const place = toPlace(body);
+  if (!place) throw new HttpError(400, 'Body must be a place with id, name, latitude and longitude');
+  return place;
+}
+
+function idParam(raw: string | string[] | undefined): number {
+  const id = Number(raw);
+  if (!Number.isFinite(id)) throw new HttpError(400, 'Invalid id');
+  return id;
+}
+
+/** Favorites, recent searches and settings, persisted in the local JSON file. */
+export function stateRoutes(storage: Storage): Router {
+  const router = Router();
+
+  router.get('/state', async (_req, res) => {
+    res.json(await storage.get());
+  });
+
+  router.get('/favorites', async (_req, res) => {
+    res.json((await storage.get()).favorites);
+  });
+
+  router.put('/favorites/:id', async (req, res) => {
+    const place = placeFromBody(req.body);
+    if (place.id !== idParam(req.params.id)) throw new HttpError(400, 'Body id does not match URL');
+    res.json((await storage.addFavorite(place)).favorites);
+  });
+
+  router.delete('/favorites/:id', async (req, res) => {
+    res.json((await storage.removeFavorite(idParam(req.params.id))).favorites);
+  });
+
+  router.get('/recent', async (_req, res) => {
+    res.json((await storage.get()).recent);
+  });
+
+  router.post('/recent', async (req, res) => {
+    res.json((await storage.addRecent(placeFromBody(req.body))).recent);
+  });
+
+  router.delete('/recent', async (_req, res) => {
+    res.json((await storage.clearRecent()).recent);
+  });
+
+  router.get('/settings', async (_req, res) => {
+    res.json((await storage.get()).settings);
+  });
+
+  router.patch('/settings', async (req, res) => {
+    const units = (req.body as { units?: unknown } | undefined)?.units;
+    if (units !== undefined && units !== 'metric' && units !== 'imperial') {
+      throw new HttpError(400, '"units" must be "metric" or "imperial"');
+    }
+    res.json((await storage.updateSettings({ units })).settings);
+  });
+
+  return router;
+}

@@ -1,0 +1,53 @@
+{
+  "name": "weather-dashboard",
+  "productName": "Weather Dashboard",
+  "version": "1.1.0",
+  "description": "A dark, modern desktop weather app powered by Open-Meteo.",
+  "author": "Mohammad (Moore) Hawwari",
+  "license": "MIT",
+  "private": true,
+  "main": "dist/main/main.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "express": "^5.3.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/supertest": "^7.2.1",
+    "chart.js": "^4.5.1",
+    "concurrently": "^10.0.6",
+    "cross-env": "^10.1.0",
+    "dotenv": "^18.0.8",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "happy-dom": "^21.0.3",
+    "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "wait-on": "^9.5.1"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n vite,tsc,app -c blue,gray,green \"vite\" \"tsc -p tsconfig.node.json -w --preserveWatchOutput\" \"wait-on tcp:127.0.0.1:5173 file:dist/main/main.js && cross-env VITE_DEV_URL=http://127.0.0.1:5173 electron .\"",
+    "dev:server": "concurrently -k -n api,vite \"tsx watch src/server/index.ts\" \"vite\"",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "npm run clean && tsc -p tsconfig.node.json && vite build",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "npm run build && vitest run --config vitest.e2e.config.mts",
+    "bench": "tsx scripts/bench.ts",
+    "screenshot": "npm run build && tsx scripts/screenshot.ts",
+    "icon": "electron scripts/make-icon.cjs",
+    "dist": "npm run build && electron-builder --win --x64",
+    "lint": "eslint . && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.test.json"
+  }
+}
