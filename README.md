@@ -142,7 +142,16 @@ Electron main process
 - [ ] **Close-button choice:** exit completely, or keep running in the background (which keeps the widget alive)
 - [ ] **Start with Windows:** option to launch the app on PC startup
 - [ ] **Settings overhaul:** turn the settings sheet into a full-screen liquid-glass panel that blurs everything behind it
-- [ ] Code-sign the installer to remove the SmartScreen warning
+- [ ] Tray icon that shows the current temperature
+- [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
+- [ ] Auto-detect my location on first launch
+- [ ] Auto-update through GitHub Releases
+- [ ] A settings page for units, startup, close behavior and widget options
+- [ ] Make the full backgroude 100% lequed glass with blerar and anything that needs a box will the bod be with extra blear behind it
+- [ ] refresh / update every 5m by it self
+- [ ] make the Temperature box to cover all 24h of the day and the time that passed does not have colours into it + a dot to show the time that we are in
+- [ ] add (your location) and it staes on top
+- [ ] an opinion for 12 am/pm format and 24 one
 - [ ] Optional long-term history (SQLite, still local)
 
 ## 📄 Notes
