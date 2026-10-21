@@ -131,27 +131,58 @@ Electron main process
 5. Unit, API and end-to-end tests.
 6. Benchmark, installer, and the v1.1 fixes after testing it myself.
 
-## 🗺️ Plan / what's next
+## 🗺️ Roadmap
 
-- [x] Current weather, 7-day forecast, rain and temperature charts
+### v1.0
+- [x] Current weather with a live clock in the city's own timezone
+- [x] 7-day forecast, rain and temperature charts
 - [x] City search, favorites, recent cities, °C/°F
 - [x] Offline fallback and cache with a measured hit rate
-- [x] Windows installer, 103 automated tests
+- [x] Windows installer
+
+### v1.1
+- [x] Fix the empty rain and temperature charts
+- [x] Fix cards overlapping when the window is resized or docked
+- [x] Selectable days in the 7-day forecast
+- [x] Temperature box with feels-like and hourly icons
+- [x] Bigger refresh button
+- [x] Recent cities as full cards, favorites with a gold bar
+- [x] Stats without boxes
+- [x] Empty settings sheet
+- [x] 103 automated tests, MIT license
 - [x] v1.1.0 released
-- [ ] **Desktop widget:** an option in the app to add a weather widget to the Windows desktop
-- [ ] **Close-button choice:** exit completely, or keep running in the background (which keeps the widget alive)
-- [ ] **Start with Windows:** option to launch the app on PC startup
-- [ ] **Settings overhaul:** turn the settings sheet into a full-screen liquid-glass panel that blurs everything behind it
-- [ ] Tray icon that shows the current temperature
-- [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
-- [ ] Auto-detect my location on first launch
-- [ ] Auto-update through GitHub Releases
+
+### v1.2 - Settings
+- [ ] Settings overhaul: turn the settings sheet into a full-screen liquid-glass panel that blurs everything behind it
 - [ ] A settings page for units, startup, close behavior and widget options
-- [ ] Make the full backgroude 100% lequed glass with blerar and anything that needs a box will the bod be with extra blear behind it
-- [ ] refresh / update every 5m by it self
-- [ ] make the Temperature box to cover all 24h of the day and the time that passed does not have colours into it + a dot to show the time that we are in
-- [ ] add (your location) and it staes on top
-- [ ] an opinion for 12 am/pm format and 24 one
+- [ ] An option for 12 am/pm format and 24 one
+
+### v1.3 - Live data and chart
+- [ ] Refresh / update every 5m by itself
+- [ ] Make the temperature box cover all 24h of the day; the time that has passed has no colours in it, plus a dot to show the time we are in
+
+### v1.4 - Auto-update
+- [ ] Auto-update through GitHub Releases
+
+### v1.5 - Location
+- [ ] Auto-detect my location on first launch
+- [ ] Add (your location) and it stays on top
+
+### v1.6 - Liquid glass look
+- [ ] Make the full background 100% liquid glass with blur, and anything that needs a box gets extra blur behind it
+
+### v1.7 - Background mode
+- [ ] Close-button choice: exit completely, or keep running in the background (which keeps the widget alive)
+- [ ] Start with Windows: option to launch the app on PC startup
+- [ ] Tray icon that shows the current temperature
+
+### v1.8 - Rain alerts
+- [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
+
+### v1.9 - Desktop widget
+- [ ] Desktop widget: an option in the app to add a weather widget to the Windows desktop
+
+### v2.0 - History
 - [ ] Optional long-term history (SQLite, still local)
 
 ## 📄 Notes
