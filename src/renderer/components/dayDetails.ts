@@ -2,7 +2,7 @@
 
 import { rainHoursForDay, rainSummary } from '../../shared/rain';
 import { formatHour, shortDate, weekday } from '../../shared/time';
-import type { WeatherData } from '../../shared/types';
+import type { TimeFormat, WeatherData } from '../../shared/types';
 import { describeWeather } from '../../shared/weatherCodes';
 import { renderRainChart, renderTempChart, type TempPoint } from '../charts';
 import { $, esc, round } from '../dom';
@@ -20,7 +20,7 @@ interface StripPoint extends TempPoint {
   isDay: boolean;
 }
 
-/** Hours shown for a day: today = now + next 24 h; other days = 12 AM to 11 PM. */
+/** Hours shown for a day: today = now + next 24 h; other days = midnight to 11 pm. */
 function tempPoints(w: WeatherData, day: string, nowLocal: string): StripPoint[] {
   const h = w.hourly;
   const point = (i: number): StripPoint => ({
@@ -62,23 +62,24 @@ function positionStrip(strip: HTMLElement, xs: number[]): void {
   });
 }
 
-export function renderDayDetails(w: WeatherData, day: string, nowLocal: string): void {
+export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, format: TimeFormat): void {
+  const hour = (t: string) => formatHour(t, false, format);
   const isToday = day === nowLocal.slice(0, 10);
   const name = isToday ? 'today' : dayName(w, day);
 
   // ----- Rain -----
   const hours = rainHoursForDay(w.hourly, day, nowLocal);
-  const rain = rainSummary(w.hourly, nowLocal, day);
+  const rain = rainSummary(w.hourly, nowLocal, day, format);
   $('#rain-title').textContent = isToday ? 'Rain today' : `Rain · ${name}`;
   const summary = $('#rain-summary');
   summary.className = `rain-summary is-${rain.level}`;
   summary.innerHTML = `${glyphs.umbrella}<span>${esc(rain.text)}</span>`;
-  renderRainChart($<HTMLCanvasElement>('#rain-chart'), hours, rain.at);
+  renderRainChart($<HTMLCanvasElement>('#rain-chart'), hours, rain.at, format);
   table(
     'rain-data',
     `Hourly chance of rain, ${name}`,
     ['Time', 'Chance of rain'],
-    hours.map((h) => [formatHour(h.time), `${h.probability}%`]),
+    hours.map((h) => [hour(h.time), `${h.probability}%`]),
   );
   $('#rain-data').dataset.values = JSON.stringify(hours.map((h) => [h.time, h.probability]));
 
@@ -90,7 +91,7 @@ export function renderDayDetails(w: WeatherData, day: string, nowLocal: string):
     const hi = points.reduce((a, b) => (b.temperature > a.temperature ? b : a));
     const lo = points.reduce((a, b) => (b.temperature < a.temperature ? b : a));
     $('#temp-summary').textContent =
-      `High ${round(hi.temperature)}° at ${formatHour(hi.time)} · Low ${round(lo.temperature)}° at ${formatHour(lo.time)}`;
+      `High ${round(hi.temperature)}° at ${hour(hi.time)} · Low ${round(lo.temperature)}° at ${hour(lo.time)}`;
   }
 
   const strip = $('#temp-strip');
@@ -100,19 +101,19 @@ export function renderDayDetails(w: WeatherData, day: string, nowLocal: string):
     .map(({ p, i }) => {
       const info = describeWeather(p.weatherCode);
       return `<div class="hour" data-index="${i}" title="${esc(info.label)}">
-          <span class="hour-time">${i === 0 && isToday ? 'Now' : formatHour(p.time)}</span>
+          <span class="hour-time">${i === 0 && isToday ? 'Now' : hour(p.time)}</span>
           ${weatherIcon(info.icon, p.isDay, 'wx-icon hour-icon')}
           <span class="hour-temp">${round(p.temperature)}°</span>
         </div>`;
     })
     .join('');
 
-  renderTempChart($<HTMLCanvasElement>('#temp-chart'), points, unit, isToday, (xs) => positionStrip(strip, xs));
+  renderTempChart($<HTMLCanvasElement>('#temp-chart'), points, unit, isToday, format, (xs) => positionStrip(strip, xs));
   table(
     'temp-data',
     `Hourly temperature, ${name}`,
     ['Time', `Temperature (${unit})`, `Feels like (${unit})`],
-    points.map((p) => [formatHour(p.time), String(round(p.temperature)), String(round(p.feelsLike))]),
+    points.map((p) => [hour(p.time), String(round(p.temperature)), String(round(p.feelsLike))]),
   );
   $('#temp-data').dataset.values = JSON.stringify(points.map((p) => [p.time, p.temperature, p.feelsLike]));
 }

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { HttpError } from '../errors';
+import { TIME_FORMATS, WIND_UNITS } from '../../shared/types';
 import { toPlace, type Storage } from '../storage';
 
 function placeFromBody(body: unknown) {
@@ -53,11 +54,16 @@ export function stateRoutes(storage: Storage): Router {
   });
 
   router.patch('/settings', async (req, res) => {
-    const units = (req.body as { units?: unknown } | undefined)?.units;
-    if (units !== undefined && units !== 'metric' && units !== 'imperial') {
-      throw new HttpError(400, '"units" must be "metric" or "imperial"');
-    }
-    res.json((await storage.updateSettings({ units })).settings);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const oneOf = (name: string, allowed: readonly string[]) => {
+      if (body[name] !== undefined && !allowed.includes(body[name] as string)) {
+        throw new HttpError(400, `"${name}" must be ${allowed.map((a) => `"${a}"`).join(' or ')}`);
+      }
+    };
+    oneOf('units', ['metric', 'imperial']);
+    oneOf('timeFormat', TIME_FORMATS);
+    oneOf('windUnit', WIND_UNITS);
+    res.json((await storage.updateSettings(body)).settings);
   });
 
   return router;

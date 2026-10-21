@@ -1,12 +1,12 @@
 import { localIsoIn } from '../shared/time';
-import type { AppState, CacheStatus, Place, Units, WeatherData } from '../shared/types';
+import type { AppState, CacheStatus, Place, TimeFormat, Units, WeatherData, WindUnit } from '../shared/types';
 import { describeWeather } from '../shared/weatherCodes';
 import { api } from './api';
 import { renderDayDetails } from './components/dayDetails';
 import { renderForecast, selectDay, setupForecast } from './components/forecast';
 import { renderHero, tickClock } from './components/hero';
 import { setupSearch } from './components/search';
-import { setupSettings } from './components/settings';
+import { setupSettings, syncSettingsControls } from './components/settings';
 import { renderSidebar, setupSidebar, type CardWeather } from './components/sidebar';
 import { $, esc, round } from './dom';
 import { glyphs } from './icons';
@@ -25,7 +25,7 @@ const REFRESH_MS = 10 * 60_000;
 const CARD_CONCURRENCY = 4;
 
 const app = {
-  state: { favorites: [], recent: [], settings: { units: 'metric' }, lastPlace: null } as AppState,
+  state: { favorites: [], recent: [], settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh' }, lastPlace: null } as AppState,
   place: null as Place | null,
   weather: null as WeatherData | null,
   cache: 'MISS' as CacheStatus,
@@ -62,13 +62,13 @@ function render(): void {
   document.body.dataset.theme = `${info.theme}-${w.current.isDay ? 'day' : 'night'}`;
   document.title = `${place.name} · ${round(w.current.temperature)}${w.unitLabels.temperature} · Weather Dashboard`;
 
-  renderHero($('#hero'), place, w, isFavorite(place), nowLocal);
-  tickClock(w.timezone);
+  renderHero($('#hero'), place, w, isFavorite(place), nowLocal, app.state.settings.timeFormat);
+  tickClock(w.timezone, app.state.settings.timeFormat);
   $('#star').addEventListener('click', () => void toggleFavorite());
 
   const day = currentDay(w, nowLocal);
   renderForecast($('#forecast'), w, nowLocal.slice(0, 10), day);
-  renderDayDetails(w, day, nowLocal);
+  renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat);
   renderUnits();
   renderUpdated();
   renderCards();
@@ -81,7 +81,7 @@ function chooseDay(day: string): void {
   const nowLocal = localIsoIn(w.timezone);
   app.day = day === nowLocal.slice(0, 10) ? null : day;
   selectDay(day);
-  renderDayDetails(w, day, nowLocal);
+  renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat);
 }
 
 function renderCards(): void {
@@ -92,6 +92,7 @@ function renderUnits(): void {
   document.querySelectorAll<HTMLButtonElement>('.units button').forEach((b) => {
     b.setAttribute('aria-pressed', String(b.dataset.units === app.state.settings.units));
   });
+  syncSettingsControls();
 }
 
 function renderUpdated(): void {
@@ -112,7 +113,7 @@ async function selectPlace(place: Place, record = true): Promise<void> {
   main.classList.add('is-loading');
   $<HTMLButtonElement>('#refresh').disabled = true;
   try {
-    const res = await api.weather(place, app.state.settings.units);
+    const res = await api.weather(place, app.state.settings.units, app.state.settings.windUnit);
     if (req !== app.request) return; // a newer selection won
     app.weather = res.data;
     app.cache = res.meta.cache;
@@ -166,14 +167,14 @@ async function toggleFavorite(): Promise<void> {
  * are fetched. A failure marks just that card.
  */
 async function loadCardWeather(all = false): Promise<void> {
-  const units = app.state.settings.units;
+  const { units, windUnit } = app.state.settings;
   const unique = new Map([...app.state.favorites, ...app.state.recent].map((p) => [p.id, p]));
   const queue = [...unique.values()].filter((p) => all || app.cards.get(p.id)?.status !== 'ok');
 
   const worker = async () => {
     for (let p = queue.shift(); p; p = queue.shift()) {
       try {
-        const { data } = await api.weather(p, units);
+        const { data } = await api.weather(p, units, windUnit);
         if (units !== app.state.settings.units) return; // units changed meanwhile
         app.cards.set(p.id, {
           status: 'ok',
@@ -201,6 +202,23 @@ async function setUnits(units: Units): Promise<void> {
   void loadCardWeather();
 }
 
+async function setWindUnit(windUnit: WindUnit): Promise<void> {
+  if (windUnit === app.state.settings.windUnit) return;
+  app.state.settings.windUnit = windUnit;
+  syncSettingsControls();
+  api.saveSettings({ windUnit }).catch(() => {});
+  if (app.place) await selectPlace(app.place, false);
+}
+
+/** Times are formatted from the weather we already have, so no reload is needed. */
+function setTimeFormat(timeFormat: TimeFormat): void {
+  if (timeFormat === app.state.settings.timeFormat) return;
+  app.state.settings.timeFormat = timeFormat;
+  syncSettingsControls();
+  api.saveSettings({ timeFormat }).catch(() => {});
+  render();
+}
+
 // ---------- boot ----------
 
 async function boot(): Promise<void> {
@@ -221,7 +239,12 @@ async function boot(): Promise<void> {
   $('#refresh-icon').innerHTML = glyphs.refresh;
   $('#settings-button').innerHTML = glyphs.gear;
   $('.settings-close').innerHTML = glyphs.close;
-  setupSettings();
+  setupSettings({
+    get: () => app.state.settings,
+    setUnits: (u) => void setUnits(u),
+    setWindUnit: (u) => void setWindUnit(u),
+    setTimeFormat,
+  });
   $('#refresh').addEventListener('click', () => void refresh());
 
   document.querySelectorAll<HTMLButtonElement>('.units button').forEach((b) =>
@@ -238,7 +261,7 @@ async function boot(): Promise<void> {
 
   // Live clock in the city's timezone.
   window.setInterval(() => {
-    if (app.weather) tickClock(app.weather.timezone);
+    if (app.weather) tickClock(app.weather.timezone, app.state.settings.timeFormat);
   }, 1000);
 
   // Keep data fresh; the server cache absorbs repeat requests.

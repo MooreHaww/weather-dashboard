@@ -1,8 +1,16 @@
 import { Router, type Response } from 'express';
-import type { GeocodeResponse, Place, Units, WeatherData, WeatherResponse } from '../../shared/types';
+import {
+  WIND_UNITS,
+  type GeocodeResponse,
+  type Place,
+  type Units,
+  type WeatherData,
+  type WeatherResponse,
+  type WindUnit,
+} from '../../shared/types';
 import type { TtlCache } from '../cache';
 import type { Metrics } from '../metrics';
-import { forecast, geocode, type FetchLike } from '../openMeteo';
+import { defaultWind, forecast, geocode, type FetchLike } from '../openMeteo';
 import { HttpError } from '../errors';
 
 interface Deps {
@@ -25,6 +33,12 @@ function parseUnits(raw: unknown): Units {
   if (raw === undefined || raw === 'metric') return 'metric';
   if (raw === 'imperial') return 'imperial';
   throw new HttpError(400, '"units" must be "metric" or "imperial"');
+}
+
+function parseWind(raw: unknown, units: Units): WindUnit {
+  if (raw === undefined) return defaultWind(units);
+  if (typeof raw === 'string' && (WIND_UNITS as readonly string[]).includes(raw)) return raw as WindUnit;
+  throw new HttpError(400, '"wind" must be "kmh", "mph" or "ms"');
 }
 
 export function weatherRoutes({ fetchImpl, weatherCache, geocodeCache, metrics }: Deps): Router {
@@ -52,9 +66,10 @@ export function weatherRoutes({ fetchImpl, weatherCache, geocodeCache, metrics }
     const lat = parseCoord(req.query.lat, 'lat', 90);
     const lon = parseCoord(req.query.lon, 'lon', 180);
     const units = parseUnits(req.query.units);
+    const wind = parseWind(req.query.wind, units);
 
-    const key = `${lat},${lon},${units}`;
-    const { value, status } = await weatherCache.getOrLoad(key, () => forecast(fetchImpl, lat, lon, units));
+    const key = `${lat},${lon},${units},${wind}`;
+    const { value, status } = await weatherCache.getOrLoad(key, () => forecast(fetchImpl, lat, lon, units, wind));
     timed(res, start, status);
     const body: WeatherResponse = { data: value, meta: { cache: status } };
     res.json(body);

@@ -107,10 +107,9 @@
       </main>
     </div>
 
-    <!-- Settings panel: slides down from the top over a frosted backdrop. Empty for now;
-         sections are added in src/renderer/components/settings.ts (SETTINGS_SECTIONS). -->
+    <!-- Settings panel: a liquid-glass layer that slides down and covers the whole window.
+         Sections live in src/renderer/components/settings.ts (SETTINGS_SECTIONS). -->
     <div class="settings" id="settings" hidden>
-      <div class="settings-scrim"></div>
       <section class="settings-sheet" id="settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title" tabindex="-1">
         <header class="settings-header">
           <h2 class="settings-title" id="settings-title">Settings</h2>

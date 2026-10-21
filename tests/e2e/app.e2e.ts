@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { COLORS, countPixels, launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
+import { localIsoIn } from '../../src/shared/time';
 
 const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69171, admin1: 'Tokyo', country: 'Japan', countryCode: 'JP' };
 const london = { id: 2643743, name: 'London', latitude: 51.50853, longitude: -0.12574, admin1: 'England', country: 'United Kingdom', countryCode: 'GB' };
@@ -21,7 +22,10 @@ const tempValues = () => page.evaluate<[string, number, number][]>(`JSON.parse(d
 async function expectChartsDrawn() {
   await page.waitFor(`${countPixels('temp-chart', COLORS.temperature)} > 150`, 8000);
   await page.waitFor(`${countPixels('temp-chart', COLORS.feelsLike)} > 60`, 8000);
-  const maxRain = Math.max(...(await rainValues()).map(([, p]) => p));
+  // Hours that already passed are drawn very faintly, so only upcoming hours decide whether bars must show.
+  const tokyoNow = localIsoIn('Asia/Tokyo').slice(0, 13);
+  const upcoming = (await rainValues()).filter(([t]) => t.slice(0, 13) >= tokyoNow);
+  const maxRain = Math.max(0, ...upcoming.map(([, p]) => p));
   if (maxRain >= 5) {
     await page.waitFor(`${countPixels('rain-chart', COLORS.rainBars)} > 30`, 8000);
   } else {
@@ -138,7 +142,8 @@ describe('Weather Dashboard (built app)', () => {
   it('switches to Fahrenheit and redraws the charts', async () => {
     await page.evaluate(`document.querySelector('[data-units="imperial"]').click()`);
     await page.waitFor(`document.querySelector('.hero-temp').textContent.endsWith('°F')`);
-    expect(await page.evaluate<string>(`document.querySelectorAll('.stat-value small')[0].textContent`)).toBe('mph');
+    // Wind speed is its own setting now: switching to °F no longer changes it.
+    expect(await page.evaluate<string>(`document.querySelectorAll('.stat-value small')[0].textContent`)).toBe('km/h');
     await expectChartsDrawn();
   });
 

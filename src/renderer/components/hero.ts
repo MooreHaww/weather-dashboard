@@ -1,6 +1,6 @@
 import { rainSummary } from '../../shared/rain';
 import { cityClock, compass, formatHour } from '../../shared/time';
-import type { Place, WeatherData } from '../../shared/types';
+import type { Place, TimeFormat, WeatherData } from '../../shared/types';
 import { describeWeather } from '../../shared/weatherCodes';
 import { esc, round } from '../dom';
 import { glyphs, weatherIcon, windArrow } from '../icons';
@@ -20,12 +20,19 @@ function stat(icon: string, label: string, value: string, sub = ''): string {
 }
 
 /** Current conditions card. The clock spans are filled by tickClock() every second. */
-export function renderHero(el: HTMLElement, place: Place, w: WeatherData, isFavorite: boolean, nowLocal: string): void {
+export function renderHero(
+  el: HTMLElement,
+  place: Place,
+  w: WeatherData,
+  isFavorite: boolean,
+  nowLocal: string,
+  format: TimeFormat,
+): void {
   const c = w.current;
   const info = describeWeather(c.weatherCode);
   const t = w.unitLabels.temperature;
   const todayIdx = Math.max(0, w.daily.time.indexOf(nowLocal.slice(0, 10)));
-  const rain = rainSummary(w.hourly, nowLocal);
+  const rain = rainSummary(w.hourly, nowLocal, undefined, format);
 
   el.innerHTML = `
     <div class="hero-place">
@@ -55,15 +62,15 @@ export function renderHero(el: HTMLElement, place: Place, w: WeatherData, isFavo
       ${stat(glyphs.thermo, 'Feels like', `${round(c.apparentTemperature)}${esc(t)}`, round(c.apparentTemperature) < round(c.temperature) ? 'Cooler than actual' : round(c.apparentTemperature) > round(c.temperature) ? 'Warmer than actual' : 'Same as actual')}
       ${stat(glyphs.wind, 'Wind', `${round(c.windSpeed)} <small>${esc(w.unitLabels.windSpeed)}</small>`, `${windArrow(c.windDirection)} From ${compass(c.windDirection)}`)}
       ${stat(glyphs.humidity, 'Humidity', `${round(c.humidity)}%`)}
-      ${stat(glyphs.umbrella, 'Rain chance', `${w.daily.precipitationProbabilityMax[todayIdx] ?? 0}%`, rain.level === 'none' ? 'Rest of today: dry' : `Peak ${formatHour(rain.at!)}`)}
-      ${stat(glyphs.sunrise, 'Sunrise', formatHour(w.daily.sunrise[todayIdx]!, true))}
-      ${stat(glyphs.sunset, 'Sunset', formatHour(w.daily.sunset[todayIdx]!, true))}
+      ${stat(glyphs.umbrella, 'Rain chance', `${w.daily.precipitationProbabilityMax[todayIdx] ?? 0}%`, rain.level === 'none' ? 'Rest of today: dry' : `Peak ${formatHour(rain.at!, false, format)}`)}
+      ${stat(glyphs.sunrise, 'Sunrise', formatHour(w.daily.sunrise[todayIdx]!, true, format))}
+      ${stat(glyphs.sunset, 'Sunset', formatHour(w.daily.sunset[todayIdx]!, true, format))}
     </div>`;
 }
 
 /** Update the live clock in the city's own timezone (never the PC's). */
-export function tickClock(timeZone: string): void {
-  const clock = cityClock(timeZone);
+export function tickClock(timeZone: string, format: TimeFormat): void {
+  const clock = cityClock(timeZone, new Date(), format);
   const set = (id: string, text: string) => {
     const el = document.getElementById(id);
     if (el && el.textContent !== text) el.textContent = text;

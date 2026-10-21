@@ -1,6 +1,8 @@
-// Settings panel: a glass sheet that slides down from the top over a frosted
-// backdrop. It is intentionally empty for now; add sections to
+// Settings panel: a liquid-glass layer that slides down from the top and covers
+// the whole window, frosting the dashboard behind it. Add sections to
 // SETTINGS_SECTIONS below (see "Settings panel" in the README).
+
+import { WIND_LABELS, type Settings, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
 
 export interface SettingsSection {
   /** Unique id, used for the section's DOM id ("settings-<id>"). */
@@ -10,8 +12,104 @@ export interface SettingsSection {
   render(body: HTMLElement): void;
 }
 
-/** Add future settings sections here, in display order. Empty for now. */
-export const SETTINGS_SECTIONS: SettingsSection[] = [];
+/** What the panel needs from the app: current settings and one setter per control. */
+export interface SettingsBindings {
+  get(): Settings;
+  setUnits(units: Units): void;
+  setWindUnit(windUnit: WindUnit): void;
+  setTimeFormat(timeFormat: TimeFormat): void;
+}
+
+let bindings: SettingsBindings | null = null;
+const syncers = new Set<() => void>();
+
+/** Refresh every control in the panel from the current settings (e.g. after the title-bar °C/°F toggle). */
+export function syncSettingsControls(): void {
+  syncers.forEach((fn) => fn());
+}
+
+/** A row of mutually exclusive buttons (radio-group semantics), styled like the title-bar unit toggle. */
+export function segmentedControl<T extends string>(opts: {
+  options: { value: T; label: string }[];
+  current: () => T;
+  onChange: (value: T) => void;
+}): HTMLElement {
+  const group = document.createElement('div');
+  group.className = 'segmented';
+  group.setAttribute('role', 'radiogroup');
+  const buttons = opts.options.map(({ value, label }) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.dataset.value = value;
+    b.textContent = label;
+    b.addEventListener('click', () => opts.onChange(value));
+    return b;
+  });
+  const sync = () => {
+    const current = opts.current();
+    buttons.forEach((b) => {
+      const on = b.dataset.value === current;
+      b.setAttribute('aria-checked', String(on));
+      b.setAttribute('aria-pressed', String(on)); // drives the same styling as the title-bar toggle
+    });
+  };
+  group.append(...buttons);
+  syncers.add(sync);
+  sync();
+  return group;
+}
+
+/** Add future settings sections here, in display order. */
+export const SETTINGS_SECTIONS: SettingsSection[] = [
+  {
+    id: 'units',
+    title: 'Units',
+    render(body) {
+      body.append(
+        settingsRow({
+          label: 'Temperature',
+          control: segmentedControl<Units>({
+            options: [
+              { value: 'metric', label: '°C' },
+              { value: 'imperial', label: '°F' },
+            ],
+            current: () => bindings!.get().units,
+            onChange: (v) => bindings!.setUnits(v),
+          }),
+        }),
+        settingsRow({
+          label: 'Wind speed',
+          control: segmentedControl<WindUnit>({
+            options: (['kmh', 'mph', 'ms'] as const).map((value) => ({ value, label: WIND_LABELS[value] })),
+            current: () => bindings!.get().windUnit,
+            onChange: (v) => bindings!.setWindUnit(v),
+          }),
+        }),
+      );
+    },
+  },
+  {
+    id: 'time-format',
+    title: 'Time format',
+    render(body) {
+      body.append(
+        settingsRow({
+          label: 'Clock',
+          description: 'Used for the live clock, hourly charts, sunrise and sunset.',
+          control: segmentedControl<TimeFormat>({
+            options: [
+              { value: '12h', label: '12-hour (AM/PM)' },
+              { value: '24h', label: '24-hour' },
+            ],
+            current: () => bindings!.get().timeFormat,
+            onChange: (v) => bindings!.setTimeFormat(v),
+          }),
+        }),
+      );
+    },
+  },
+];
 
 let rowCount = 0;
 
@@ -27,7 +125,13 @@ export function settingsRow(opts: { label: string; description?: string; control
   label.className = 'settings-row-label';
   label.textContent = opts.label;
   opts.control.id ||= `settings-control-${n}`;
-  label.htmlFor = opts.control.id;
+  if (opts.control.matches('input, select, textarea, button, meter, output, progress')) {
+    label.htmlFor = opts.control.id;
+  } else {
+    // A label can't point at a div; name the control (e.g. a radio group) from the label instead.
+    label.id = `settings-label-${n}`;
+    opts.control.setAttribute('aria-labelledby', label.id);
+  }
   text.append(label);
 
   if (opts.description) {
@@ -74,7 +178,8 @@ const FOCUSABLE =
 const CLOSE_FALLBACK_MS = 400;
 
 /** Wire the gear button and the panel. Call once at startup. */
-export function setupSettings(): { open: () => void; close: () => void; isOpen: () => boolean } {
+export function setupSettings(b: SettingsBindings): { open: () => void; close: () => void; isOpen: () => boolean } {
+  bindings = b;
   const root = document.getElementById('settings')!;
   const sheet = document.getElementById('settings-sheet')!;
   const gear = document.getElementById('settings-button')!;
@@ -82,9 +187,9 @@ export function setupSettings(): { open: () => void; close: () => void; isOpen: 
   const background = [document.querySelector('.titlebar'), document.querySelector('.layout')].filter(
     (el): el is HTMLElement => el !== null,
   );
-  const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   renderSettingsSections(document.getElementById('settings-sections')!);
+  syncSettingsControls();
 
   let open = false;
   let hideTimer: number | undefined;
@@ -119,17 +224,13 @@ export function setupSettings(): { open: () => void; close: () => void; isOpen: 
     const onEnd = (e: TransitionEvent) => {
       if (e.target === sheet) finish();
     };
-    if (reducedMotion()) {
-      finish();
-    } else {
-      sheet.addEventListener('transitionend', onEnd);
-      hideTimer = window.setTimeout(finish, CLOSE_FALLBACK_MS);
-    }
+    // Slide (or, with reduced motion, fade) out first, then hide.
+    sheet.addEventListener('transitionend', onEnd);
+    hideTimer = window.setTimeout(finish, CLOSE_FALLBACK_MS);
   }
 
   gear.addEventListener('click', () => (open ? hide() : show()));
   closeButton.addEventListener('click', hide);
-  root.querySelector('.settings-scrim')!.addEventListener('click', hide);
 
   sheet.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

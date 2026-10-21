@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.1.0-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.2.0-orange?style=for-the-badge)
 
 ![Weather Dashboard screenshot](docs/screenshot.png)
 
@@ -29,11 +29,12 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **Current conditions:** temperature, feels like, wind, humidity, sunrise and sunset.
 - **Live local clock** for the selected city, using that city's own timezone (for example `UTC+5:45` for Kathmandu).
 - **7-day forecast:** click a day (or use ←/→) and the rain and temperature charts switch to it.
-- **Rain chart** with a one-line summary such as *"Rain likely at 4 PM (70%)"*.
+- **Rain chart** with a one-line summary such as *"Rain likely at 4 PM (70%)"* (or *"16:00"* in 24-hour mode).
 - **Temperature chart** with a dashed feels-like line and an hourly icon strip.
 - **City search** with keyboard shortcuts (`Ctrl+K` or `/`).
 - **Favorites and recent cities**, shown as cards with live weather.
 - **°C / °F toggle**, remembered between launches.
+- **Settings panel (v1.2):** a full-window liquid-glass panel with temperature and wind-speed units (km/h, mph, m/s) and a 12-hour or 24-hour clock that updates everywhere at once.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -76,8 +77,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (68 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (35 tests, needs internet) |
+| `npm test` | Unit and API tests (86 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (39 tests, needs internet) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -93,6 +94,17 @@ There are no secrets anywhere. Copy `.env.example` to `.env` only if you want to
 - How to **test a GUI app end to end**, including checking that the charts actually drew pixels.
 - How to make an Electron app **secure** and **accessible**.
 - Why a **local JSON file** beats a cloud database for an app that other people install.
+
+## ⚙️ Settings panel
+
+The gear in the title bar opens a liquid-glass panel that covers the whole window: the dashboard behind it stays visible but frosted. `Esc`, the close button (in the gear's spot) or the gear itself closes it, and keyboard focus stays inside while it is open. Its content scrolls when the window is short. With "reduce animations" on in Windows it fades instead of sliding.
+
+| Section | Options |
+|---|---|
+| **Units** | Temperature °C / °F (kept in sync with the toggle in the title bar), wind speed km/h / mph / m/s |
+| **Time format** | 12-hour (AM/PM) or 24-hour, used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
+
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -153,9 +165,9 @@ Electron main process
 - [x] v1.1.0 released
 
 ### v1.2 - Settings
-- [ ] Settings overhaul: turn the settings sheet into a full-screen liquid-glass panel that blurs everything behind it
-- [ ] A settings page for units, startup, close behavior and widget options
-- [ ] An option for 12 am/pm format and 24 one
+- [x] Settings overhaul: turn the settings sheet into a full-screen liquid-glass panel that blurs everything behind it
+- [x] A settings page for units, startup, close behavior and widget options
+- [x] An option for 12 am/pm format and 24 one
 
 ### v1.3 - Live data and chart
 - [ ] Refresh / update every 5m by itself

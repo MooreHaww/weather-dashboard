@@ -1,4 +1,4 @@
-import type { AppState, GeocodeResponse, Place, Settings, Units, WeatherResponse } from '../shared/types';
+import type { AppState, GeocodeResponse, Place, Settings, Units, WeatherResponse, WindUnit } from '../shared/types';
 
 export class ApiError extends Error {
   constructor(
@@ -31,8 +31,8 @@ export const api = {
   geocode: (q: string, signal?: AbortSignal) =>
     call<GeocodeResponse>(`/api/geocode?q=${encodeURIComponent(q)}`, { signal }),
 
-  weather: (p: Pick<Place, 'latitude' | 'longitude'>, units: Units) =>
-    call<WeatherResponse>(`/api/weather?lat=${p.latitude}&lon=${p.longitude}&units=${units}`),
+  weather: (p: Pick<Place, 'latitude' | 'longitude'>, units: Units, wind: WindUnit) =>
+    call<WeatherResponse>(`/api/weather?lat=${p.latitude}&lon=${p.longitude}&units=${units}&wind=${wind}`),
 
   addFavorite: (p: Place) => call<Place[]>(`/api/favorites/${p.id}`, { method: 'PUT', body: JSON.stringify(p) }),
   removeFavorite: (id: number) => call<Place[]>(`/api/favorites/${id}`, { method: 'DELETE' }),

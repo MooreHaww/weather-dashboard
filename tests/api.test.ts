@@ -111,6 +111,22 @@ describe('GET /api/weather', () => {
     expect(fetchMock.mock.calls[1]![0]).toContain('wind_speed_unit=mph');
   });
 
+  it('lets the wind unit be chosen separately from the temperature unit', async () => {
+    const app = makeApp();
+    const ms = await request(app).get('/api/weather?lat=1&lon=2&units=imperial&wind=ms').expect(200);
+    expect(ms.body.data.unitLabels).toEqual({ temperature: '°F', windSpeed: 'm/s' });
+    expect(fetchMock.mock.calls[0]![0]).toContain('wind_speed_unit=ms');
+    expect(fetchMock.mock.calls[0]![0]).toContain('temperature_unit=fahrenheit');
+
+    const kmh = await request(app).get('/api/weather?lat=1&lon=2&units=imperial&wind=kmh').expect(200);
+    expect(kmh.body.meta.cache).toBe('MISS'); // a different wind unit is a different cache entry
+    expect(kmh.body.data.unitLabels.windSpeed).toBe('km/h');
+  });
+
+  it('rejects an unknown wind unit', async () => {
+    await request(makeApp()).get('/api/weather?lat=1&lon=2&wind=knots').expect(400);
+  });
+
   it('refetches after the TTL expires', async () => {
     const app = makeApp();
     await request(app).get('/api/weather?lat=1&lon=2').expect(200);
@@ -200,6 +216,23 @@ describe('favorites, recent and settings', () => {
     const after = await request(app).delete(`/api/favorites/${tokyo.id}`).expect(200);
     expect(after.body).toEqual([]);
     expect((await request(app).delete('/api/recent').expect(200)).body).toEqual([]);
+  });
+
+  it('saves time format and wind unit, and an old state still loads with defaults', async () => {
+    const app = makeApp();
+    const defaults = await request(app).get('/api/settings').expect(200);
+    expect(defaults.body).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh' });
+
+    const res = await request(app).patch('/api/settings').send({ timeFormat: '24h', windUnit: 'mph' }).expect(200);
+    expect(res.body).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'mph' });
+    expect((await request(makeApp()).get('/api/settings').expect(200)).body).toEqual(res.body);
+  });
+
+  it('rejects an invalid time format or wind unit', async () => {
+    const app = makeApp();
+    await request(app).patch('/api/settings').send({ timeFormat: '36h' }).expect(400);
+    await request(app).patch('/api/settings').send({ windUnit: 'knots' }).expect(400);
+    expect((await request(app).get('/api/settings')).body.timeFormat).toBe('12h');
   });
 
   it('validates bodies', async () => {

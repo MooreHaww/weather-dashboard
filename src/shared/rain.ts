@@ -1,4 +1,4 @@
-import type { HourlySeries } from './types';
+import type { HourlySeries, TimeFormat } from './types';
 import { formatHour } from './time';
 
 export const LIKELY_THRESHOLD = 50;
@@ -41,7 +41,12 @@ export function rainHoursForDay(hourly: HourlySeries, day: string, nowLocal: str
  * `nowLocal` is the city-local time ("YYYY-MM-DDTHH:mm[:ss]"); `day` defaults
  * to today. For today only the remaining hours count.
  */
-export function rainSummary(hourly: HourlySeries, nowLocal: string, day: string = nowLocal.slice(0, 10)): RainSummary {
+export function rainSummary(
+  hourly: HourlySeries,
+  nowLocal: string,
+  day: string = nowLocal.slice(0, 10),
+  format: TimeFormat = '12h',
+): RainSummary {
   const isToday = day === nowLocal.slice(0, 10);
   const upcoming = rainHoursForDay(hourly, day, nowLocal).filter((h) => !h.isPast);
   const currentHour = nowLocal.slice(0, 13);
@@ -55,7 +60,7 @@ export function rainSummary(hourly: HourlySeries, nowLocal: string, day: string 
       probability: likely.probability,
       text: now
         ? `Rain likely now (${likely.probability}%)`
-        : `Rain likely at ${formatHour(likely.time)} (${likely.probability}%)`,
+        : `Rain likely at ${formatHour(likely.time, false, format)} (${likely.probability}%)`,
     };
   }
 
@@ -68,7 +73,7 @@ export function rainSummary(hourly: HourlySeries, nowLocal: string, day: string 
       level: 'chance',
       at: peak.time,
       probability: peak.probability,
-      text: `Slight chance of rain around ${formatHour(peak.time)} (${peak.probability}%)`,
+      text: `Slight chance of rain around ${formatHour(peak.time, false, format)} (${peak.probability}%)`,
     };
   }
 

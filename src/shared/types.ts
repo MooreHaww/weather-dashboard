@@ -1,6 +1,12 @@
 // Types shared by the Express server and the renderer.
 
 export type Units = 'metric' | 'imperial';
+export type TimeFormat = '12h' | '24h';
+export type WindUnit = 'kmh' | 'mph' | 'ms';
+
+export const TIME_FORMATS: readonly TimeFormat[] = ['12h', '24h'];
+export const WIND_UNITS: readonly WindUnit[] = ['kmh', 'mph', 'ms'];
+export const WIND_LABELS: Record<WindUnit, string> = { kmh: 'km/h', mph: 'mph', ms: 'm/s' };
 
 /** A city returned by geocoding, also used for favorites and recent searches. */
 export interface Place {
@@ -79,6 +85,8 @@ export interface GeocodeResponse {
 
 export interface Settings {
   units: Units;
+  timeFormat: TimeFormat;
+  windUnit: WindUnit;
 }
 
 export interface AppState {

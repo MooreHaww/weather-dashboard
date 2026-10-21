@@ -4,7 +4,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { AppState, Place, Settings } from '../shared/types';
+import { TIME_FORMATS, WIND_UNITS, type AppState, type Place, type Settings } from '../shared/types';
 
 export const MAX_RECENT = 10;
 export const MAX_FAVORITES = 50;
@@ -14,8 +14,22 @@ interface StoredFile extends AppState {
   version: 1;
 }
 
+export function defaultSettings(): Settings {
+  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh' };
+}
+
 export function defaultState(): AppState {
-  return { favorites: [], recent: [], settings: { units: 'metric' }, lastPlace: null };
+  return { favorites: [], recent: [], settings: defaultSettings(), lastPlace: null };
+}
+
+/** Keep only valid settings values from untrusted input (a request patch or an older file). */
+export function validSettings(raw: unknown): Partial<Settings> {
+  const o = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const out: Partial<Settings> = {};
+  if (o.units === 'metric' || o.units === 'imperial') out.units = o.units;
+  if (TIME_FORMATS.includes(o.timeFormat as never)) out.timeFormat = o.timeFormat as Settings['timeFormat'];
+  if (WIND_UNITS.includes(o.windUnit as never)) out.windUnit = o.windUnit as Settings['windUnit'];
+  return out;
 }
 
 /** Validate untrusted input (request bodies, file contents) into a Place, or null. */
@@ -48,11 +62,10 @@ function sanitize(raw: unknown): AppState {
   const o = raw as Record<string, unknown>;
   const places = (x: unknown, max: number) =>
     (Array.isArray(x) ? x : []).map(toPlace).filter((p): p is Place => p !== null).slice(0, max);
-  const settings = o.settings as Partial<Settings> | undefined;
   return {
     favorites: places(o.favorites, MAX_FAVORITES),
     recent: places(o.recent, MAX_RECENT),
-    settings: { units: settings?.units === 'imperial' ? 'imperial' : 'metric' },
+    settings: { ...defaultSettings(), ...validSettings(o.settings) },
     lastPlace: toPlace(o.lastPlace),
   };
 }
@@ -150,9 +163,9 @@ export class Storage {
     });
   }
 
-  updateSettings(patch: Partial<Settings>) {
+  updateSettings(patch: unknown) {
     return this.update((s) => {
-      if (patch.units === 'metric' || patch.units === 'imperial') s.settings.units = patch.units;
+      Object.assign(s.settings, validSettings(patch));
     });
   }
 }

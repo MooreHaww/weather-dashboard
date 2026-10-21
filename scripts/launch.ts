@@ -14,7 +14,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import type { AppState } from '../src/shared/types';
+import type { AppState, Settings } from '../src/shared/types';
 
 const root = path.join(__dirname, '..');
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -105,8 +105,12 @@ export interface LaunchedApp {
   resize: (width: number, height: number) => Promise<void>;
   maximize: () => Promise<void>;
   restore: () => Promise<void>;
-  close: () => Promise<void>;
+  /** Quit the app. `keepData` leaves the data folder so a second launchApp({ dataDir }) can reopen it. */
+  close: (opts?: { keepData?: boolean }) => Promise<void>;
 }
+
+/** A saved-state seed; the settings can be partial (like an older file). */
+export type Seed = Omit<Partial<AppState>, 'settings'> & { settings?: Partial<Settings> };
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -131,8 +135,8 @@ const KEYS = {
 };
 const SHIFT = 8; // CDP modifier bit
 
-export async function launchApp(seed?: Partial<AppState>): Promise<LaunchedApp> {
-  const dataDir = await mkdtemp(path.join(tmpdir(), 'wd-e2e-'));
+export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): Promise<LaunchedApp> {
+  const dataDir = opts.dataDir ?? (await mkdtemp(path.join(tmpdir(), 'wd-e2e-')));
   if (seed) {
     await writeFile(path.join(dataDir, 'weather-dashboard.json'), JSON.stringify({ version: 1, ...seed }), 'utf8');
   }
@@ -251,12 +255,12 @@ export async function launchApp(seed?: Partial<AppState>): Promise<LaunchedApp> 
       await inMain(`win.unmaximize();`);
       await settle();
     },
-    async close() {
+    async close({ keepData = false } = {}) {
       cdp.close();
       main.close();
       child.kill();
       if (!exited) await new Promise((r) => child.once('exit', r));
-      await rm(dataDir, { recursive: true, force: true }).catch(() => {});
+      if (!keepData) await rm(dataDir, { recursive: true, force: true }).catch(() => {});
     },
   };
 }

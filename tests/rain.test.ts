@@ -30,6 +30,19 @@ describe('rainSummary (today)', () => {
     expect(s.text).toBe('Rain likely at 4 PM (70%)');
   });
 
+  it('writes the hour in 24-hour mode when asked', () => {
+    const s = rainSummary(hourly({ 16: 70 }), '2026-10-17T10:15', undefined, '24h');
+    expect(s.text).toBe('Rain likely at 16:00 (70%)');
+    expect(rainSummary(hourly({ 16: 70 }), '2026-10-17T10:15', undefined, '12h').text).toBe('Rain likely at 4 PM (70%)');
+  });
+
+  it('uses the chosen format for the slight-chance line too', () => {
+    expect(rainSummary(hourly({ 15: 35 }), '2026-10-17T10:00', undefined, '24h').text).toBe(
+      'Slight chance of rain around 15:00 (35%)',
+    );
+    expect(rainSummary(hourly({ 15: 35 }), '2026-10-17T10:00').text).toBe('Slight chance of rain around 3 PM (35%)');
+  });
+
   it('ignores hours that have already passed', () => {
     const s = rainSummary(hourly({ 8: 95, 20: 10 }), '2026-10-17T12:00');
     expect(s.level).toBe('none');

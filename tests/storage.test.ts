@@ -18,7 +18,12 @@ afterEach(async () => {
 describe('Storage', () => {
   it('starts with defaults when no file exists', async () => {
     const s = new Storage(dir);
-    expect(await s.get()).toEqual({ favorites: [], recent: [], settings: { units: 'metric' }, lastPlace: null });
+    expect(await s.get()).toEqual({
+      favorites: [],
+      recent: [],
+      settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh' },
+      lastPlace: null,
+    });
   });
 
   it('persists favorites and settings across instances', async () => {
@@ -67,6 +72,29 @@ describe('Storage', () => {
     const state = await s.get();
     expect(state.favorites.map((f) => f.id)).toEqual([1]);
     expect(state.settings.units).toBe('metric');
+  });
+
+  it('loads an old file without the new settings and fills the defaults', async () => {
+    const s = new Storage(dir);
+    await writeFile(s.filePath, JSON.stringify({ version: 1, favorites: [place(1)], settings: { units: 'imperial' } }));
+    const state = await s.get();
+    expect(state.settings).toEqual({ units: 'imperial', timeFormat: '12h', windUnit: 'kmh' });
+    expect(state.favorites).toHaveLength(1);
+  });
+
+  it('falls back to defaults for invalid time format and wind unit', async () => {
+    const s = new Storage(dir);
+    await writeFile(s.filePath, JSON.stringify({ settings: { timeFormat: '36h', windUnit: 'knots' } }));
+    expect((await s.get()).settings).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh' });
+  });
+
+  it('saves and reloads time format and wind unit, ignoring invalid patch values', async () => {
+    const a = new Storage(dir);
+    await a.updateSettings({ timeFormat: '24h', windUnit: 'ms' });
+    await a.updateSettings({ timeFormat: 'nope', windUnit: 'ms' });
+    expect((await new Storage(dir).get()).settings).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'ms' });
+    await a.updateSettings({ units: 'imperial' }); // a partial patch keeps the rest
+    expect((await new Storage(dir).get()).settings).toEqual({ units: 'imperial', timeFormat: '24h', windUnit: 'ms' });
   });
 
   it('serializes concurrent writes without losing any', async () => {

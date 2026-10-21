@@ -14,6 +14,7 @@ import {
 } from 'chart.js';
 import type { HourPoint } from '../shared/rain';
 import { formatHour } from '../shared/time';
+import type { TimeFormat } from '../shared/types';
 
 Chart.register(LineController, LineElement, PointElement, BarController, BarElement, LinearScale, CategoryScale, Filler, Tooltip);
 
@@ -77,10 +78,12 @@ export function renderTempChart(
   points: TempPoint[],
   unit: string,
   firstIsNow: boolean,
+  format: TimeFormat,
   onLayout: LayoutListener,
 ): void {
   onTempLayout = onLayout;
-  const labels = points.map((p, i) => (i === 0 && firstIsNow ? 'Now' : formatHour(p.time)));
+  const labels = points.map((p, i) => (i === 0 && firstIsNow ? 'Now' : formatHour(p.time, false, format)));
+  canvas.dataset.labels = JSON.stringify(labels); // for tests; the canvas itself is not readable
   const temps = points.map((p) => round1(p.temperature));
   const feels = points.map((p) => round1(p.feelsLike));
   const label = (c: { dataset: { label?: string }; parsed: { y: number | null } }) => ` ${c.dataset.label}: ${c.parsed.y}${unit}`;
@@ -157,8 +160,9 @@ function barColor(p: HourPoint, highlight: string | null): string {
   return p.isPast ? `rgba(90, 176, 255, ${alpha * 0.4})` : `rgba(90, 176, 255, ${alpha})`;
 }
 
-export function renderRainChart(canvas: HTMLCanvasElement, hours: HourPoint[], highlight: string | null): void {
-  const labels = hours.map((h) => formatHour(h.time));
+export function renderRainChart(canvas: HTMLCanvasElement, hours: HourPoint[], highlight: string | null, format: TimeFormat): void {
+  const labels = hours.map((h) => formatHour(h.time, false, format));
+  canvas.dataset.labels = JSON.stringify(labels);
   const data = hours.map((h) => h.probability);
   const colors = hours.map((h) => barColor(h, highlight));
 

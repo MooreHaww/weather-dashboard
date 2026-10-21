@@ -1,6 +1,6 @@
 // Typed clients for the Open-Meteo geocoding and forecast APIs (no API key needed).
 
-import type { Place, Units, WeatherData } from '../shared/types';
+import { WIND_LABELS, type Place, type Units, type WeatherData, type WindUnit } from '../shared/types';
 
 export const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 export const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
@@ -115,7 +115,10 @@ interface RawForecast {
   };
 }
 
-export function forecastUrl(lat: number, lon: number, units: Units): string {
+/** Wind unit used when the caller doesn't pick one: imperial → mph, otherwise km/h. */
+export const defaultWind = (units: Units): WindUnit => (units === 'imperial' ? 'mph' : 'kmh');
+
+export function forecastUrl(lat: number, lon: number, units: Units, wind: WindUnit = defaultWind(units)): string {
   const params = new URLSearchParams({
     latitude: String(lat),
     longitude: String(lon),
@@ -127,7 +130,7 @@ export function forecastUrl(lat: number, lon: number, units: Units): string {
     timezone: 'auto',
     forecast_days: '7',
     temperature_unit: units === 'imperial' ? 'fahrenheit' : 'celsius',
-    wind_speed_unit: units === 'imperial' ? 'mph' : 'kmh',
+    wind_speed_unit: wind,
   });
   return `${FORECAST_URL}?${params}`;
 }
@@ -137,9 +140,10 @@ export async function forecast(
   lat: number,
   lon: number,
   units: Units,
+  wind: WindUnit = defaultWind(units),
   timeoutMs = 8000,
 ): Promise<WeatherData> {
-  const raw = await getJson<RawForecast>(fetchImpl, forecastUrl(lat, lon, units), timeoutMs);
+  const raw = await getJson<RawForecast>(fetchImpl, forecastUrl(lat, lon, units, wind), timeoutMs);
   return {
     latitude: raw.latitude,
     longitude: raw.longitude,
@@ -150,7 +154,7 @@ export async function forecast(
     // Our own labels: Open-Meteo spells mph as "mp/h".
     unitLabels: {
       temperature: units === 'imperial' ? '°F' : '°C',
-      windSpeed: units === 'imperial' ? 'mph' : 'km/h',
+      windSpeed: WIND_LABELS[wind],
     },
     current: {
       time: raw.current.time,

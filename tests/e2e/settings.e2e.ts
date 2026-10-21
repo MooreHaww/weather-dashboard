@@ -1,7 +1,10 @@
-// Settings panel: opening/closing, focus handling, the frosted blur, and layout
-// at every tested window size. Uses real mouse clicks and key presses.
+// Settings panel: opening/closing, focus handling, the full-window glass, the
+// Units and Time format settings (live updates, persistence) and layout at every
+// tested window size. Uses real mouse clicks and key presses.
 // Run with: npm run test:e2e
 
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { COLORS, countPixels, launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 
@@ -9,6 +12,8 @@ const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69
 
 let app: LaunchedApp;
 let page: AppPage;
+/** Page exceptions from app instances that were already closed (the restart test). */
+const earlierErrors: string[] = [];
 
 const isOpen = () => page.evaluate<boolean>(`!document.getElementById('settings').hidden`);
 const activeId = () => page.evaluate<string>(`document.activeElement?.id || document.activeElement?.className || ''`);
@@ -38,6 +43,27 @@ async function waitClosed() {
   await page.waitFor(`document.getElementById('settings').hidden`, 2000);
 }
 
+/** Click an option of a settings control with a real click (the panel must be open). */
+async function chooseOption(value: string) {
+  const [x, y] = await centerOf(`#settings-sections button[data-value="${value}"]`);
+  await page.click(x, y);
+}
+
+const checkedOptions = () =>
+  page.evaluate<string[]>(
+    `[...document.querySelectorAll('#settings-sections button[aria-checked="true"]')].map((b) => b.dataset.value)`,
+  );
+const clockText = () => page.evaluate<string>(`document.getElementById('clock-time').textContent`);
+const windUnitIs = (unit: string) =>
+  `[...document.querySelectorAll('.stat')].some((s) => s.querySelector('.stat-label span').textContent === 'Wind' && s.querySelector('small')?.textContent === ${JSON.stringify(unit)})`;
+const statText = (label: string) =>
+  page.evaluate<string>(
+    `[...document.querySelectorAll('.stat')].find((s) => s.querySelector('.stat-label span').textContent === ${JSON.stringify(label)}).querySelector('.stat-value').textContent`,
+  );
+const chartLabels = (id: string) => page.evaluate<string[]>(`JSON.parse(document.getElementById(${JSON.stringify(id)}).dataset.labels)`);
+const stripTimes = () =>
+  page.evaluate<string[]>(`[...document.querySelectorAll('#temp-strip .hour-time')].map((e) => e.textContent)`);
+
 beforeAll(async () => {
   app = await launchApp({ lastPlace: tokyo, favorites: [tokyo], recent: [tokyo], settings: { units: 'metric' } });
   page = app.page;
@@ -66,28 +92,46 @@ describe('settings panel', () => {
     expect(dialog).toEqual({ role: 'dialog', modal: 'true', name: 'Settings' });
     expect(await page.evaluate(`document.getElementById('settings-button').getAttribute('aria-expanded')`)).toBe('true');
     expect(await focusInPanel()).toBe(true);
-    // Empty for this version: no placeholder text or fake options.
-    expect(await page.evaluate(`document.getElementById('settings-sections').children.length`)).toBe(0);
-    expect(await page.evaluate(`document.getElementById('settings-sections').textContent.trim()`)).toBe('');
+    // Exactly the real sections: no placeholders for startup, close behavior or widget.
+    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
+      'Units',
+      'Time format',
+    ]);
+    expect(await checkedOptions()).toEqual(['metric', 'kmh', '12h']);
   });
 
-  it('frosts everything behind it, and the sheet itself is glass with rounded bottom corners', async () => {
-    const styles = await page.evaluate<Record<string, string>>(`(() => {
-      const scrim = getComputedStyle(document.querySelector('.settings-scrim'));
-      const sheet = getComputedStyle(document.getElementById('settings-sheet'));
-      return { scrim: scrim.backdropFilter, scrimBg: scrim.backgroundColor, sheet: sheet.backdropFilter,
-        sheetBg: sheet.backgroundImage, bl: sheet.borderBottomLeftRadius, br: sheet.borderBottomRightRadius, tl: sheet.borderTopLeftRadius };
+  it('is a full-window liquid-glass layer that blurs the app behind it', async () => {
+    const r = await page.evaluate<Record<string, string | number | boolean>>(`(() => {
+      const sheet = document.getElementById('settings-sheet');
+      const s = getComputedStyle(sheet);
+      const b = sheet.getBoundingClientRect();
+      return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, vw: innerWidth, vh: innerHeight,
+        backdrop: s.backdropFilter, bg: s.backgroundImage, shadow: s.boxShadow, radius: s.borderTopLeftRadius,
+        noScrim: document.querySelector('.settings-scrim') === null };
     })()`);
-    const blurPx = (f: string) => Number(/blur\(([\d.]+)px\)/.exec(f)?.[1] ?? 0);
-    expect(blurPx(styles.scrim!)).toBeGreaterThan(0);
-    expect(blurPx(styles.sheet!)).toBeGreaterThan(0);
-    expect(styles.scrimBg).toMatch(/rgba\(4, 8, 18, 0\.3\d*\)/); // slight darkening
-    expect(styles.sheetBg).toContain('rgba'); // translucent
-    expect(parseFloat(styles.bl!)).toBeGreaterThan(0);
-    expect(parseFloat(styles.br!)).toBeGreaterThan(0);
-    expect(parseFloat(styles.tl!)).toBe(0);
+    expect([r.left, r.top, r.right, r.bottom]).toEqual([0, 0, r.vw, r.vh]); // covers the whole window
+    const blurPx = Number(/blur\(([\d.]+)px\)/.exec(r.backdrop as string)?.[1] ?? 0);
+    expect(blurPx).toBeGreaterThanOrEqual(30); // strong backdrop blur
+    expect(r.backdrop).toContain('saturate'); // a bit of saturation
+    expect(r.bg).toContain('rgba'); // translucent glass layers
+    expect(r.shadow).toContain('inset'); // light edge and inner glow
+    expect(parseFloat(r.radius as string)).toBe(0);
+    expect(r.noScrim).toBe(true); // the glass itself does the blurring
     // The rest of the app can't be focused or clicked while the panel is open.
     expect(await page.evaluate(`document.querySelector('.layout').inert && document.querySelector('.titlebar').inert`)).toBe(true);
+  });
+
+  it('the title bar stays draggable and the window buttons stay clear and visible', async () => {
+    const r = await page.evaluate<Record<string, string | number>>(`(() => {
+      const header = document.querySelector('.settings-header');
+      const close = document.querySelector('.settings-close');
+      return { drag: getComputedStyle(header).webkitAppRegion, closeNoDrag: getComputedStyle(close).webkitAppRegion,
+        headerHeight: header.getBoundingClientRect().height, closeRight: close.getBoundingClientRect().right, vw: innerWidth };
+    })()`);
+    expect(r.drag).toBe('drag');
+    expect(r.closeNoDrag).toBe('no-drag');
+    expect(r.headerHeight).toBe(52);
+    expect(r.closeRight).toBeLessThanOrEqual((r.vw as number) - 130); // the right 150 px belong to Windows
   });
 
   it('keeps focus inside the panel (Tab and Shift+Tab)', async () => {
@@ -112,14 +156,6 @@ describe('settings panel', () => {
     expect(await activeId()).toBe('settings-button');
     expect(await page.evaluate(`document.getElementById('settings-button').getAttribute('aria-expanded')`)).toBe('false');
     expect(await page.evaluate(`document.querySelector('.layout').inert`)).toBe(false);
-  });
-
-  it('a click on the blurred area outside the panel closes it', async () => {
-    await openPanel();
-    const [w, h] = await page.evaluate<[number, number]>(`[innerWidth, innerHeight]`);
-    await page.click(w / 2, h - 10);
-    await waitClosed();
-    expect(await activeId()).toBe('settings-button');
   });
 
   it('a click inside the panel does not close it; the close button does', async () => {
@@ -151,55 +187,156 @@ describe('settings panel', () => {
     [800, 600],
     [500, 900],
     [1000, 450],
-  ])('%i×%i: the open panel fits, nothing overlaps, no horizontal scroll', async (w, h) => {
+  ])('%i×%i: the panel covers the window, content scrolls, nothing overlaps', async (w, h) => {
     await app.resize(w, h);
     await openPanel();
-    const r = await page.evaluate<Record<string, number | boolean>>(`(() => {
+    const r = await page.evaluate<Record<string, number | boolean | string>>(`(() => {
       const box = (s) => document.querySelector(s).getBoundingClientRect();
       const sheet = box('#settings-sheet'), title = box('#settings-title'), close = box('.settings-close');
-      return {
+      const sections = document.getElementById('settings-sections');
+      sections.scrollTop = sections.scrollHeight; // scroll all the way down, like the user would
+      const lastRect = sections.lastElementChild.getBoundingClientRect(), area = sections.getBoundingClientRect();
+      const out = {
         vw: innerWidth, vh: innerHeight,
-        sheetLeft: sheet.left, sheetRight: sheet.right, sheetBottom: sheet.bottom,
-        titleRight: title.right, closeLeft: close.left, closeRight: close.right, closeTop: close.top,
-        hScroll: document.documentElement.scrollWidth > innerWidth + 1,
+        sheetLeft: sheet.left, sheetTop: sheet.top, sheetRight: sheet.right, sheetBottom: sheet.bottom,
+        titleRight: title.right, closeLeft: close.left, closeRight: close.right, closeTop: close.top, closeBottom: close.bottom,
+        hScroll: document.documentElement.scrollWidth > innerWidth + 1 || sections.scrollWidth > sections.clientWidth + 1,
+        overflowY: getComputedStyle(sections).overflowY,
+        lastVisible: lastRect.bottom <= area.bottom + 1 && lastRect.top >= area.top - 1,
+        bodyScrolls: document.scrollingElement.scrollHeight > innerHeight + 1,
       };
+      sections.scrollTop = 0;
+      return out;
     })()`);
-    expect(r.sheetLeft).toBeGreaterThanOrEqual(0);
-    expect(r.sheetRight).toBeLessThanOrEqual(r.vw as number);
-    expect(r.sheetBottom).toBeLessThan((r.vh as number) - 20); // blurred strip left to click
+    expect([r.sheetLeft, r.sheetTop, r.sheetRight, r.sheetBottom]).toEqual([0, 0, r.vw, r.vh]);
+    expect(r.overflowY).toBe('auto');
+    expect(r.lastVisible).toBe(true); // the last section can always be scrolled into view
     expect(r.titleRight).toBeLessThanOrEqual(r.closeLeft as number);
     expect(r.closeRight).toBeLessThanOrEqual((r.vw as number) - 130); // clear of the window controls
     expect(r.closeTop).toBeGreaterThanOrEqual(0);
+    expect(r.closeBottom).toBeLessThanOrEqual(52);
     expect(r.hScroll).toBe(false);
+    expect(r.bodyScrolls).toBe(false); // only the panel's content area scrolls
     await page.press('Escape');
     await waitClosed();
   });
 
-  it('with reduced motion, it opens and closes instantly without sliding', async () => {
+  it('with reduced motion, it fades instead of sliding', async () => {
     await app.resize(1000, 700);
     await page.emulateReducedMotion(true);
     try {
       await clickGear();
       const now = await page.evaluate<Record<string, string | boolean>>(`(() => {
         const s = getComputedStyle(document.getElementById('settings-sheet'));
-        return { open: !document.getElementById('settings').hidden, transform: s.transform, duration: s.transitionDuration };
+        return { open: !document.getElementById('settings').hidden, transform: s.transform, property: s.transitionProperty, duration: s.transitionDuration };
       })()`);
       expect(now.open).toBe(true);
-      expect(now.transform).toBe('none');
-      expect(now.duration).toMatch(/^0s(, 0s)*$/);
+      expect(now.transform).toBe('none'); // no slide
+      expect(now.property).toBe('opacity'); // a simple fade
+      expect(parseFloat(now.duration as string)).toBeGreaterThan(0);
+      expect(parseFloat(now.duration as string)).toBeLessThanOrEqual(0.2);
       await page.press('Escape');
-      expect(await isOpen()).toBe(false); // hidden immediately, no waiting for an animation
+      await waitClosed();
       expect(await activeId()).toBe('settings-button');
     } finally {
       await page.emulateReducedMotion(false);
     }
   });
 
-  it('charts are still drawn after opening and closing', async () => {
+  it('the title-bar °C/°F toggle and the Temperature setting stay in sync', async () => {
+    await app.resize(1000, 700);
+    const [fx, fy] = await centerOf('.units button[data-units="imperial"]');
+    await page.click(fx, fy);
+    await page.waitFor(`document.querySelector('.units button[aria-pressed="true"]').dataset.units === 'imperial'`, 2000);
+    await openPanel();
+    expect(await checkedOptions()).toContain('imperial');
+    await chooseOption('metric');
+    await page.waitFor(`document.querySelector('.units button[aria-pressed="true"]').dataset.units === 'metric'`, 8000);
+    expect(await checkedOptions()).toContain('metric');
+    await page.press('Escape');
+    await waitClosed();
+  });
+
+  it('Time format: 24-hour updates the clock, strip, chart labels, sun times and rain line at once', async () => {
+    await page.waitFor(`${countPixels('temp-chart', COLORS.temperature)} > 150`, 8000);
+    expect(await clockText()).toMatch(/(AM|PM)$/);
+    await openPanel();
+    await chooseOption('24h');
+    // No reload: the same page, updated in place.
+    await page.waitFor(`/^\\d{2}:\\d{2}:\\d{2}$/.test(document.getElementById('clock-time').textContent)`, 2000);
+    expect(await checkedOptions()).toContain('24h');
+    const strip = await stripTimes();
+    expect(strip.length).toBeGreaterThan(0);
+    expect(strip.every((x) => /^(Now|\d{2}:00)$/.test(x))).toBe(true);
+    const rain = await chartLabels('rain-chart');
+    expect(rain.length).toBeGreaterThan(0);
+    expect(rain.every((l) => /^\d{2}:00$/.test(l))).toBe(true);
+    const temp = await chartLabels('temp-chart');
+    expect(temp[0]).toBe('Now');
+    expect(temp.slice(1).every((l) => /^\d{2}:00$/.test(l))).toBe(true);
+    expect(await statText('Sunrise')).toMatch(/^\d{2}:\d{2}$/);
+    expect(await statText('Sunset')).toMatch(/^\d{2}:\d{2}$/);
+    const text = await page.evaluate<string>(
+      `['rain-summary', 'temp-summary', 'rain-data', 'temp-data'].map((id) => document.getElementById(id).textContent).join(' ')`,
+    );
+    expect(text).not.toMatch(/\b(AM|PM)\b/);
+
+    await chooseOption('12h');
+    await page.waitFor(`/(AM|PM)$/.test(document.getElementById('clock-time').textContent)`, 2000);
+    expect((await chartLabels('rain-chart')).every((l) => /^\d{1,2} (AM|PM)$/.test(l))).toBe(true);
+    expect(await statText('Sunrise')).toMatch(/^\d{1,2}:\d{2} (AM|PM)$/);
+    await page.press('Escape');
+    await waitClosed();
+  });
+
+  it('Wind speed: choosing m/s or mph changes the Wind stat', async () => {
+    await page.waitFor(windUnitIs('km/h'), 5000);
+    await openPanel();
+    await chooseOption('ms');
+    await page.waitFor(windUnitIs('m/s'), 15_000);
+    expect(await checkedOptions()).toContain('ms');
+    await chooseOption('mph');
+    await page.waitFor(windUnitIs('mph'), 15_000);
+    await page.press('Escape');
+    await waitClosed();
+  });
+
+  it('settings persist after a restart', async () => {
+    await openPanel();
+    await chooseOption('24h');
+    await chooseOption('ms');
+    await page.press('Escape');
+    await waitClosed();
+
+    // The save is fire-and-forget: wait until it reached the file, then quit and relaunch on the same data.
+    const file = path.join(app.dataDir, 'weather-dashboard.json');
+    const saved = async () => {
+      const s = JSON.parse(await readFile(file, 'utf8')).settings;
+      return s.timeFormat === '24h' && s.windUnit === 'ms';
+    };
+    for (let i = 0; i < 40 && !(await saved().catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
+    expect(await saved()).toBe(true);
+
+    earlierErrors.push(...app.errors);
+    const dataDir = app.dataDir;
+    await app.close({ keepData: true });
+    app = await launchApp(undefined, { dataDir });
+    page = app.page;
+    await waitForDashboard(page);
+
+    await page.waitFor(`/^\\d{2}:\\d{2}:\\d{2}$/.test(document.getElementById('clock-time').textContent)`, 5000);
+    await page.waitFor(windUnitIs('m/s'), 15_000);
+    await openPanel();
+    expect(await checkedOptions()).toEqual(expect.arrayContaining(['24h', 'ms']));
+    await page.press('Escape');
+    await waitClosed();
+  });
+
+  it('charts are still drawn after all of that', async () => {
     await page.waitFor(`${countPixels('temp-chart', COLORS.temperature)} > 150`, 8000);
   });
 
   it('threw no errors', () => {
-    expect(app.errors).toEqual([]);
+    expect([...earlierErrors, ...app.errors]).toEqual([]);
   });
 });
