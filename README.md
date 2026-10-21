@@ -33,8 +33,7 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **Temperature chart** with a dashed feels-like line and an hourly icon strip.
 - **City search** with keyboard shortcuts (`Ctrl+K` or `/`).
 - **Favorites and recent cities**, shown as cards with live weather.
-- **°C / °F toggle**, remembered between launches.
-- **Settings panel (v1.2):** a full-window liquid-glass panel with temperature and wind-speed units (km/h, mph, m/s) and a 12-hour or 24-hour clock that updates everywhere at once.
+- **Settings panel (v1.2):** a full-window liquid-glass panel with temperature (°C/°F) and wind-speed units (km/h, mph, m/s) and a 12-hour or 24-hour clock that updates everywhere at once.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -78,7 +77,7 @@ npm run dev
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
 | `npm test` | Unit and API tests (86 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (39 tests, needs internet) |
+| `npm run test:e2e` | Launches the real app and checks the UI (64 tests, needs internet) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -101,7 +100,7 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 
 | Section | Options |
 |---|---|
-| **Units** | Temperature °C / °F (kept in sync with the toggle in the title bar), wind speed km/h / mph / m/s |
+| **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour (AM/PM) or 24-hour, used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 
 Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
@@ -152,9 +151,12 @@ Electron main process
 - [x] Offline fallback and cache with a measured hit rate
 - [x] Windows installer
 
-### v1.1
+#### v1.0 (Fixes)
 - [x] Fix the empty rain and temperature charts
 - [x] Fix cards overlapping when the window is resized or docked
+- [x] Fix day cards not clickable
+
+### v1.1
 - [x] Selectable days in the 7-day forecast
 - [x] Temperature box with feels-like and hourly icons
 - [x] Bigger refresh button
@@ -164,38 +166,61 @@ Electron main process
 - [x] 103 automated tests, MIT license
 - [x] v1.1.0 released
 
+#### v1.1 (Fixes)
+- [x] One automatic retry when Open-Meteo returns a server error
+
 ### v1.2 - Settings
 - [x] Settings overhaul: turn the settings sheet into a full-screen liquid-glass panel that blurs everything behind it
 - [x] A settings page for units, startup, close behavior and widget options
 - [x] An option for 12 am/pm format and 24 one
 
+#### v1.2 (Fixes)
+- [x] Remove the duplicate °C/°F toggle from the title bar
+- [x] Fix the missing divider lines in the narrow layout
+
 ### v1.3 - Live data and chart
 - [ ] Refresh / update every 5m by itself
 - [ ] Make the temperature box cover all 24h of the day; the time that has passed has no colours in it, plus a dot to show the time we are in
 
+#### v1.3 (Fixes)
+
 ### v1.4 - Auto-update
 - [ ] Auto-update through GitHub Releases
+
+#### v1.4 (Fixes)
 
 ### v1.5 - Location
 - [ ] Auto-detect my location on first launch
 - [ ] Add (your location) and it stays on top
 
+#### v1.5 (Fixes)
+
 ### v1.6 - Liquid glass look
 - [ ] Make the full background 100% liquid glass with blur, and anything that needs a box gets extra blur behind it
+
+#### v1.6 (Fixes)
 
 ### v1.7 - Background mode
 - [ ] Close-button choice: exit completely, or keep running in the background (which keeps the widget alive)
 - [ ] Start with Windows: option to launch the app on PC startup
 - [ ] Tray icon that shows the current temperature
 
+#### v1.7 (Fixes)
+
 ### v1.8 - Rain alerts
 - [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
+
+#### v1.8 (Fixes)
 
 ### v1.9 - Desktop widget
 - [ ] Desktop widget: an option in the app to add a weather widget to the Windows desktop
 
+#### v1.9 (Fixes)
+
 ### v2.0 - History
 - [ ] Optional long-term history (SQLite, still local)
+
+#### v2.0 (Fixes)
 
 ## 📄 Notes
 

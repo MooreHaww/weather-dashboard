@@ -23,12 +23,12 @@ export interface SettingsBindings {
 let bindings: SettingsBindings | null = null;
 const syncers = new Set<() => void>();
 
-/** Refresh every control in the panel from the current settings (e.g. after the title-bar °C/°F toggle). */
+/** Refresh every control in the panel from the current settings (after a setting changes outside the panel). */
 export function syncSettingsControls(): void {
   syncers.forEach((fn) => fn());
 }
 
-/** A row of mutually exclusive buttons (radio-group semantics), styled like the title-bar unit toggle. */
+/** A row of mutually exclusive buttons (radio-group semantics), styled as a pill group. */
 export function segmentedControl<T extends string>(opts: {
   options: { value: T; label: string }[];
   current: () => T;
@@ -51,7 +51,7 @@ export function segmentedControl<T extends string>(opts: {
     buttons.forEach((b) => {
       const on = b.dataset.value === current;
       b.setAttribute('aria-checked', String(on));
-      b.setAttribute('aria-pressed', String(on)); // drives the same styling as the title-bar toggle
+      b.setAttribute('aria-pressed', String(on)); // drives the pressed styling
     });
   };
   group.append(...buttons);

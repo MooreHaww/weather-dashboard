@@ -140,10 +140,15 @@ describe('Weather Dashboard (built app)', () => {
   });
 
   it('switches to Fahrenheit and redraws the charts', async () => {
-    await page.evaluate(`document.querySelector('[data-units="imperial"]').click()`);
+    // Units are only changed in Settings now (no toggle in the title bar).
+    await page.evaluate(`document.getElementById('settings-button').click()`);
+    await page.waitFor(`document.querySelector('#settings-sections button[data-value="imperial"]')`);
+    await page.evaluate(`document.querySelector('#settings-sections button[data-value="imperial"]').click()`);
     await page.waitFor(`document.querySelector('.hero-temp').textContent.endsWith('°F')`);
     // Wind speed is its own setting now: switching to °F no longer changes it.
     expect(await page.evaluate<string>(`document.querySelectorAll('.stat-value small')[0].textContent`)).toBe('km/h');
+    await page.evaluate(`document.querySelector('.settings-close').click()`);
+    await page.waitFor(`document.getElementById('settings').hidden`, 2000);
     await expectChartsDrawn();
   });
 

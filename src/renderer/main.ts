@@ -89,9 +89,6 @@ function renderCards(): void {
 }
 
 function renderUnits(): void {
-  document.querySelectorAll<HTMLButtonElement>('.units button').forEach((b) => {
-    b.setAttribute('aria-pressed', String(b.dataset.units === app.state.settings.units));
-  });
   syncSettingsControls();
 }
 
@@ -246,10 +243,6 @@ async function boot(): Promise<void> {
     setTimeFormat,
   });
   $('#refresh').addEventListener('click', () => void refresh());
-
-  document.querySelectorAll<HTMLButtonElement>('.units button').forEach((b) =>
-    b.addEventListener('click', () => void setUnits(b.dataset.units as Units)),
-  );
 
   document.addEventListener('keydown', (e) => {
     const typing = (e.target as HTMLElement).matches('input, textarea');

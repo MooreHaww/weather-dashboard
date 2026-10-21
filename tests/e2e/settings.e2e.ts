@@ -35,7 +35,7 @@ async function clickGear() {
 async function openPanel() {
   await clickGear();
   await page.waitFor(`document.getElementById('settings').classList.contains('is-open')`, 2000);
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 500));
 }
 
 /** Wait for the panel to be fully closed (hidden after the slide-out). */
@@ -109,7 +109,10 @@ describe('settings panel', () => {
         backdrop: s.backdropFilter, bg: s.backgroundImage, shadow: s.boxShadow, radius: s.borderTopLeftRadius,
         noScrim: document.querySelector('.settings-scrim') === null };
     })()`);
-    expect([r.left, r.top, r.right, r.bottom]).toEqual([0, 0, r.vw, r.vh]); // covers the whole window
+    // Covers the whole window (within a pixel: the slide-in easing may still be settling).
+    for (const [got, want] of [[r.left, 0], [r.top, 0], [r.right, r.vw], [r.bottom, r.vh]] as [number, number][]) {
+      expect(Math.abs(got - want)).toBeLessThan(1);
+    }
     const blurPx = Number(/blur\(([\d.]+)px\)/.exec(r.backdrop as string)?.[1] ?? 0);
     expect(blurPx).toBeGreaterThanOrEqual(30); // strong backdrop blur
     expect(r.backdrop).toContain('saturate'); // a bit of saturation
@@ -208,7 +211,9 @@ describe('settings panel', () => {
       sections.scrollTop = 0;
       return out;
     })()`);
-    expect([r.sheetLeft, r.sheetTop, r.sheetRight, r.sheetBottom]).toEqual([0, 0, r.vw, r.vh]);
+    for (const [got, want] of [[r.sheetLeft, 0], [r.sheetTop, 0], [r.sheetRight, r.vw], [r.sheetBottom, r.vh]] as [number, number][]) {
+      expect(Math.abs(got - want)).toBeLessThan(1);
+    }
     expect(r.overflowY).toBe('auto');
     expect(r.lastVisible).toBe(true); // the last section can always be scrolled into view
     expect(r.titleRight).toBeLessThanOrEqual(r.closeLeft as number);
@@ -243,18 +248,36 @@ describe('settings panel', () => {
     }
   });
 
-  it('the title-bar °C/°F toggle and the Temperature setting stay in sync', async () => {
+  it('Units is the only place to change °C/°F: the title bar has no toggle', async () => {
     await app.resize(1000, 700);
-    const [fx, fy] = await centerOf('.units button[data-units="imperial"]');
-    await page.click(fx, fy);
-    await page.waitFor(`document.querySelector('.units button[aria-pressed="true"]').dataset.units === 'imperial'`, 2000);
+    expect(await page.evaluate<number>(`document.querySelectorAll('.titlebar .units, .titlebar [data-units]').length`)).toBe(0);
+    expect(await page.evaluate<number>(`document.querySelectorAll('.titlebar button').length`)).toBe(1); // just the gear
     await openPanel();
+    await chooseOption('imperial');
+    await page.waitFor(`document.querySelector('.hero-temp').textContent.endsWith('°F')`, 8000);
+    expect(await page.evaluate<string>(`document.title`)).toContain('°F');
     expect(await checkedOptions()).toContain('imperial');
     await chooseOption('metric');
-    await page.waitFor(`document.querySelector('.units button[aria-pressed="true"]').dataset.units === 'metric'`, 8000);
+    await page.waitFor(`document.querySelector('.hero-temp').textContent.endsWith('°C')`, 8000);
     expect(await checkedOptions()).toContain('metric');
     await page.press('Escape');
     await waitClosed();
+  });
+
+  it.each([480, 600, 860, 1000, 1360])('%i px wide: search box and gear fit in the title bar, clear of the window buttons', async (w) => {
+    await app.resize(w, 700);
+    const r = await page.evaluate<Record<string, number>>(`(() => {
+      const box = (s) => document.querySelector(s).getBoundingClientRect();
+      const search = box('#search'), gear = box('#settings-button'), brand = box('.brand');
+      return { vw: innerWidth, searchLeft: search.left, searchRight: search.right, searchHeight: search.height, gearLeft: gear.left, gearRight: gear.right,
+        gearTop: gear.top, gearBottom: gear.bottom, brandRight: brand.right, brandLeft: brand.left };
+    })()`);
+    expect(r.searchRight).toBeLessThanOrEqual(r.gearLeft! - 4); // search never touches the gear
+    expect(r.searchLeft).toBeGreaterThanOrEqual(r.brandRight!);
+    expect(r.searchRight! - r.searchLeft!).toBeGreaterThan(120); // still usable
+    expect(r.gearRight).toBeLessThanOrEqual(r.vw! - 130); // clear of the Windows buttons
+    expect(r.gearTop).toBeGreaterThanOrEqual(0);
+    expect(r.gearBottom).toBeLessThanOrEqual(52);
   });
 
   it('Time format: 24-hour updates the clock, strip, chart labels, sun times and rain line at once', async () => {

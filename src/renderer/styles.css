@@ -96,7 +96,7 @@ a:hover { text-decoration: underline; }
 
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; letter-spacing: 0.01em; white-space: nowrap; }
 
-.search, .units, .icon-button { -webkit-app-region: no-drag; }
+.search, .icon-button { -webkit-app-region: no-drag; }
 
 .titlebar-actions { display: flex; align-items: center; gap: 8px; }
 
@@ -163,13 +163,13 @@ a:hover { text-decoration: underline; }
   background: rgba(255, 255, 255, 0.08); color: var(--muted);
 }
 
-.units, .segmented { display: flex; padding: 3px; gap: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--stroke); }
-.units button, .segmented button {
+.segmented { display: flex; padding: 3px; gap: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--stroke); }
+.segmented button {
   border: 0; background: transparent; cursor: pointer;
   padding: 4px 12px; border-radius: 6px; font-weight: 600; color: var(--muted);
 }
-.units button[aria-pressed='true'], .segmented button[aria-pressed='true'] { background: var(--accent-strong); color: #fff; }
-.units button:not([aria-pressed='true']):hover, .segmented button:not([aria-pressed='true']):hover { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+.segmented button[aria-pressed='true'] { background: var(--accent-strong); color: #fff; }
+.segmented button:not([aria-pressed='true']):hover { background: rgba(255, 255, 255, 0.07); color: var(--text); }
 
 /* ---------- layout ----------
    One scroll container (.layout) below the title bar. Cards never shrink below
@@ -356,10 +356,11 @@ a:hover { text-decoration: underline; }
 .stat-sub { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wind-arrow { width: 12px; height: 12px; flex: none; color: var(--accent); }
 
-/* 3 columns × 2 rows */
-.hero-stats .stat:not(:nth-child(3n + 1)) { border-left: 1px solid var(--divider); }
-.hero-stats .stat:nth-child(n + 4) { border-top: 1px solid var(--divider); }
-.hero-stats .stat:nth-child(3n + 1) { padding-left: 0; }
+/* Dividers: a line on the left of every stat that is not first in its row, and on
+   top of every stat that is not in the first row; none after the last column or row.
+   The three layouts (3, 6 and 2 columns) each have their own block under "responsive"
+   below, and their media queries never overlap, so no rule from one layout can
+   out-rank or leak into another (an overlap once left wrong or missing lines). */
 
 /* ---------- rain and temperature cards ---------- */
 
@@ -444,8 +445,6 @@ a:hover { text-decoration: underline; }
 @media (max-width: 1240px) {
   .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .hero-stats { grid-column: 1 / -1; grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .hero-stats .stat { border-top: 0; padding-left: 16px; border-left: 1px solid var(--divider); }
-  .hero-stats .stat:first-child { border-left: 0; padding-left: 0; }
 }
 
 @media (max-width: 1080px) {
@@ -458,9 +457,6 @@ a:hover { text-decoration: underline; }
 @media (max-width: 960px) {
   .grid-2 { grid-template-columns: minmax(0, 1fr); }
   .hero-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
-  .hero-stats .stat:nth-child(3n + 1) { border-left: 0; padding-left: 0; }
-  .hero-stats .stat:nth-child(n + 4) { border-top: 1px solid var(--divider); }
 }
 
 /* Single column: weather first, favorites and recent below it. */
@@ -485,11 +481,30 @@ a:hover { text-decoration: underline; }
   .hero-temp { font-size: 54px; }
   .hero-icon { width: 84px; height: 84px; }
   .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
-  .hero-stats .stat:nth-child(2n + 1) { border-left: 0; padding-left: 0; }
-  .hero-stats .stat:nth-child(n + 3) { border-top: 1px solid var(--divider); }
   .card { padding: 16px; }
   .legend { gap: 10px; }
+}
+
+/* Stat dividers, one block per layout. The ranges are exclusive on purpose. */
+
+/* 3 columns × 2 rows: wide windows (above 1240 px) and 601-960 px. */
+@media (min-width: 1241px), (min-width: 601px) and (max-width: 960px) {
+  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
+  .hero-stats .stat:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
+  .hero-stats .stat:nth-child(n + 4) { border-top: 1px solid var(--divider); }
+}
+
+/* 6 columns × 1 row: 961-1240 px. */
+@media (min-width: 961px) and (max-width: 1240px) {
+  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
+  .hero-stats .stat:first-child { padding-left: 0; border-left: 0; }
+}
+
+/* 2 columns × 3 rows: 600 px and below. */
+@media (max-width: 600px) {
+  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
+  .hero-stats .stat:nth-child(2n + 1) { padding-left: 0; border-left: 0; }
+  .hero-stats .stat:nth-child(n + 3) { border-top: 1px solid var(--divider); }
 }
 
 /* ---------- icon buttons (gear, settings close) ---------- */
