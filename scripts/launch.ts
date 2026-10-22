@@ -93,6 +93,8 @@ export interface AppPage {
   click(x: number, y: number): Promise<void>;
   /** Emulate Windows' "Animation effects: off" (prefers-reduced-motion: reduce). */
   emulateReducedMotion(on: boolean): Promise<void>;
+  /** Run a script in every page load before the app's own scripts, then reload (e.g. to speed up timers). */
+  reloadWithScript(source: string): Promise<void>;
   screenshot(): Promise<Buffer>;
 }
 
@@ -231,6 +233,11 @@ export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): P
         features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }],
       });
     },
+    async reloadWithScript(source) {
+      await cdp.send('Page.enable');
+      await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source });
+      await cdp.send('Page.reload');
+    },
     async screenshot() {
       const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
       return Buffer.from(data, 'base64');
@@ -287,9 +294,36 @@ export function countPixels(canvasId: string, match: string): string {
   })()`;
 }
 
+/**
+ * Like countPixels, but only for canvas columns x0 <= x < x1. The bounds are JS
+ * expressions in canvas pixels (CSS pixels times devicePixelRatio).
+ */
+export function countPixelsBetween(canvasId: string, match: string, x0: string, x1: string): string {
+  return `(() => {
+    const c = document.getElementById(${JSON.stringify(canvasId)});
+    const lo = Math.max(0, Math.floor(${x0})), hi = Math.min(c.width, Math.ceil(${x1}));
+    if (hi <= lo) return 0;
+    const d = c.getContext('2d').getImageData(lo, 0, hi - lo, c.height).data;
+    const m = (r, g, b, a) => ${match};
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (m(d[i], d[i + 1], d[i + 2], d[i + 3])) n++;
+    return n;
+  })()`;
+}
+
 /** Color families used by the charts (see src/renderer/charts.ts). */
 export const COLORS = {
   temperature: 'a > 150 && r > 220 && g > 140 && g < 210 && b < 120', // #FFB547
   feelsLike: 'a > 120 && r > 160 && r < 225 && g > 150 && g < 205 && b > 225', // #C4B5FD
+  passed: 'a > 60 && Math.abs(r - 148) < 14 && Math.abs(g - 163) < 14 && Math.abs(b - 184) < 14', // grey for hours that have passed
   rainBars: 'a > 40 && r < 160 && g > 150 && b > 220', // #5AB0FF / #7CC4FF
 };
+
+/**
+ * Pixels the temperature line has painted, coloured or (for hours already passed
+ * today) grey. Late in the day little of the line is coloured, so "the chart has
+ * drawn" has to count both.
+ */
+export function temperaturePainted(canvasId = 'temp-chart'): string {
+  return `(${countPixels(canvasId, COLORS.temperature)} + ${countPixels(canvasId, COLORS.passed)})`;
+}

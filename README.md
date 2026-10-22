@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.2.0-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.3.0-orange?style=for-the-badge)
 
 ![Weather Dashboard screenshot](docs/screenshot.png)
 
@@ -34,6 +34,7 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **City search** with keyboard shortcuts (`Ctrl+K` or `/`).
 - **Favorites and recent cities**, shown as cards with live weather.
 - **Settings panel (v1.2):** a full-window liquid-glass panel with temperature (°C/°F) and wind-speed units (km/h, mph, m/s) and a 12-hour or 24-hour clock that updates everywhere at once.
+- **Live data and chart (v1.3):** refreshes itself every 5 minutes with no flicker, and the temperature chart covers the whole day (12 AM to 11 PM in the city's own time): hours that have passed are grey, the rest is coloured, and a dot marks the current time.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -76,8 +77,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (86 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (64 tests, needs internet) |
+| `npm test` | Unit and API tests (112 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (74 tests, needs internet) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -179,8 +180,8 @@ Electron main process
 - [x] Fix the missing divider lines in the narrow layout
 
 ### v1.3 - Live data and chart
-- [ ] Refresh / update every 5m by itself
-- [ ] Make the temperature box cover all 24h of the day; the time that has passed has no colours in it, plus a dot to show the time we are in
+- [x] Refresh / update every 5m by itself
+- [x] Make the temperature box cover all 24h of the day; the time that has passed has no colours in it, plus a dot to show the time we are in
 
 #### v1.3 (Fixes)
 

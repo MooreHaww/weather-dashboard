@@ -69,7 +69,9 @@ export function weatherRoutes({ fetchImpl, weatherCache, geocodeCache, metrics }
     const wind = parseWind(req.query.wind, units);
 
     const key = `${lat},${lon},${units},${wind}`;
-    const { value, status } = await weatherCache.getOrLoad(key, () => forecast(fetchImpl, lat, lon, units, wind));
+    // fresh=1 (auto-refresh, refresh button) skips the cached copy but still refills it.
+    const force = req.query.fresh === '1';
+    const { value, status } = await weatherCache.getOrLoad(key, () => forecast(fetchImpl, lat, lon, units, wind), { force });
     timed(res, start, status);
     const body: WeatherResponse = { data: value, meta: { cache: status } };
     res.json(body);

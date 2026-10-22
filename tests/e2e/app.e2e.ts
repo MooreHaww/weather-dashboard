@@ -4,7 +4,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { COLORS, countPixels, launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
+import { COLORS, countPixels, launchApp, temperaturePainted, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 import { localIsoIn } from '../../src/shared/time';
 
 const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69171, admin1: 'Tokyo', country: 'Japan', countryCode: 'JP' };
@@ -20,8 +20,8 @@ const tempValues = () => page.evaluate<[string, number, number][]>(`JSON.parse(d
 
 /** Wait until the charts have actually painted their data (animations finish within ~0.5 s). */
 async function expectChartsDrawn() {
-  await page.waitFor(`${countPixels('temp-chart', COLORS.temperature)} > 150`, 8000);
-  await page.waitFor(`${countPixels('temp-chart', COLORS.feelsLike)} > 60`, 8000);
+  await page.waitFor(`${temperaturePainted()} > 150`, 8000);
+  await page.waitFor(`${countPixels('temp-chart', COLORS.feelsLike)} + ${countPixels('temp-chart', COLORS.passed)} > 60`, 8000);
   // Hours that already passed are drawn very faintly, so only upcoming hours decide whether bars must show.
   const tokyoNow = localIsoIn('Asia/Tokyo').slice(0, 13);
   const upcoming = (await rainValues()).filter(([t]) => t.slice(0, 13) >= tokyoNow);
@@ -60,7 +60,7 @@ describe('Weather Dashboard (built app)', () => {
   });
 
   it('draws real data in both charts (not just empty axes)', async () => {
-    expect((await tempValues()).length).toBe(25); // now + 24 h
+    expect((await tempValues()).length).toBe(24); // the whole local day, 12 AM to 11 PM
     expect((await rainValues()).length).toBe(24);
     await expectChartsDrawn();
   });
@@ -119,7 +119,7 @@ describe('Weather Dashboard (built app)', () => {
     await page.press('Home');
     expect(await checkedIndex()).toBe(0);
     expect(await text('#rain-title')).toBe('Rain today');
-    expect(await text('#temp-title')).toBe('Temperature · next 24 hours');
+    expect(await text('#temp-title')).toBe('Temperature · Today');
   });
 
   it('shows recent cities as full cards with weather', async () => {

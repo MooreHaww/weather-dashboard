@@ -54,11 +54,12 @@ export class TtlCache<V> {
    * Return a fresh cached value (HIT), or call `load` (MISS). Concurrent
    * misses for the same key share one upstream call; the followers count as
    * hits because they didn't cause a request. If `load` fails and an expired
-   * copy exists, that copy is returned as STALE.
+   * copy exists, that copy is returned as STALE. With `force`, a cached copy
+   * is ignored and `load` is called (a MISS); the STALE fallback still applies.
    */
-  async getOrLoad(key: string, load: () => Promise<V>): Promise<CacheResult<V>> {
+  async getOrLoad(key: string, load: () => Promise<V>, opts: { force?: boolean } = {}): Promise<CacheResult<V>> {
     const entry = this.entries.get(key);
-    if (entry && entry.expiresAt > this.now()) {
+    if (!opts.force && entry && entry.expiresAt > this.now()) {
       this.hits++;
       this.entries.delete(key); // refresh LRU position
       this.entries.set(key, entry);

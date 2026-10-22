@@ -46,6 +46,31 @@ describe('TtlCache', () => {
     expect(cache.stats().stale).toBe(1);
   });
 
+  it('force skips a fresh copy, counts a miss and refills the cache', async () => {
+    const c = clock();
+    const cache = new TtlCache<number>(1000, 10, c.now);
+    let n = 0;
+    const load = async () => ++n;
+
+    await cache.getOrLoad('k', load);
+    expect(await cache.getOrLoad('k', load, { force: true })).toEqual({ value: 2, status: 'MISS' });
+    expect(await cache.getOrLoad('k', load)).toEqual({ value: 2, status: 'HIT' }); // the forced load was stored
+    expect(cache.stats()).toMatchObject({ hits: 1, misses: 2 });
+  });
+
+  it('force still falls back to the saved copy as STALE when the loader fails', async () => {
+    const cache = new TtlCache<string>(1000);
+    await cache.getOrLoad('k', async () => 'old');
+    const res = await cache.getOrLoad(
+      'k',
+      async () => {
+        throw new Error('offline');
+      },
+      { force: true },
+    );
+    expect(res).toEqual({ value: 'old', status: 'STALE' });
+  });
+
   it('rethrows when the loader fails and nothing is cached', async () => {
     const cache = new TtlCache<string>(1000);
     await expect(

@@ -136,6 +136,25 @@ describe('GET /api/weather', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('fresh=1 skips a cached copy and refills the cache', async () => {
+    const app = makeApp();
+    await request(app).get('/api/weather?lat=1&lon=2').expect(200);
+    const fresh = await request(app).get('/api/weather?lat=1&lon=2&fresh=1').expect(200);
+    expect(fresh.body.meta.cache).toBe('MISS');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const after = await request(app).get('/api/weather?lat=1&lon=2').expect(200);
+    expect(after.body.meta.cache).toBe('HIT');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('fresh=1 returns the saved copy as STALE when Open-Meteo is down', async () => {
+    const app = makeApp();
+    await request(app).get('/api/weather?lat=1&lon=2').expect(200);
+    fetchMock.mockRejectedValue(new TypeError('fetch failed'));
+    const res = await request(app).get('/api/weather?lat=1&lon=2&fresh=1').expect(200);
+    expect(res.body.meta.cache).toBe('STALE');
+  });
+
   it('serves stale data when Open-Meteo is down', async () => {
     const app = makeApp();
     await request(app).get('/api/weather?lat=1&lon=2').expect(200);

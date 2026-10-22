@@ -2,7 +2,8 @@ import { localIsoIn } from '../shared/time';
 import type { AppState, CacheStatus, Place, TimeFormat, Units, WeatherData, WindUnit } from '../shared/types';
 import { describeWeather } from '../shared/weatherCodes';
 import { api } from './api';
-import { renderDayDetails } from './components/dayDetails';
+import { moveTempNow } from './charts';
+import { nowMarker, renderDayDetails } from './components/dayDetails';
 import { renderForecast, selectDay, setupForecast } from './components/forecast';
 import { renderHero, tickClock } from './components/hero';
 import { setupSearch } from './components/search';
@@ -10,6 +11,7 @@ import { setupSettings, syncSettingsControls } from './components/settings';
 import { renderSidebar, setupSidebar, type CardWeather } from './components/sidebar';
 import { $, esc, round } from './dom';
 import { glyphs } from './icons';
+import { createRefresher } from './refresh';
 
 const DEFAULT_PLACE: Place = {
   id: 2643743,
@@ -21,7 +23,7 @@ const DEFAULT_PLACE: Place = {
   countryCode: 'GB',
   timezone: 'Europe/London',
 };
-const REFRESH_MS = 10 * 60_000;
+const REFRESH_MS = 5 * 60_000;
 const CARD_CONCURRENCY = 4;
 
 const app = {
@@ -29,14 +31,24 @@ const app = {
   place: null as Place | null,
   weather: null as WeatherData | null,
   cache: 'MISS' as CacheStatus,
-  loadedAt: 0,
   /** Selected forecast day ("YYYY-MM-DD"); null means today. */
   day: null as string | null,
   cards: new Map<number, CardWeather>(),
   request: 0,
+  /** City-local date and hour ("YYYY-MM-DDTHH") the cards were last drawn for. */
+  drawnHour: '',
 };
 
 const main = $('#main');
+
+const refresher = createRefresher({
+  intervalMs: REFRESH_MS,
+  now: Date.now,
+  isVisible: () => document.visibilityState === 'visible',
+  run: autoRefresh,
+  setTimer: (fn, ms) => window.setInterval(fn, ms),
+  clearTimer: (h) => window.clearInterval(h as number),
+});
 
 // ---------- rendering ----------
 
@@ -58,6 +70,7 @@ function render(): void {
   const { place, weather: w } = app;
   if (!place || !w) return;
   const nowLocal = localIsoIn(w.timezone);
+  app.drawnHour = nowLocal.slice(0, 13);
   const info = describeWeather(w.current.weatherCode);
   document.body.dataset.theme = `${info.theme}-${w.current.isDay ? 'day' : 'night'}`;
   document.title = `${place.name} · ${round(w.current.temperature)}${w.unitLabels.temperature} · Weather Dashboard`;
@@ -79,6 +92,7 @@ function chooseDay(day: string): void {
   const w = app.weather;
   if (!w) return;
   const nowLocal = localIsoIn(w.timezone);
+  app.drawnHour = nowLocal.slice(0, 13);
   app.day = day === nowLocal.slice(0, 10) ? null : day;
   selectDay(day);
   renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat);
@@ -103,25 +117,37 @@ function renderUpdated(): void {
 
 const isFavorite = (p: Place) => app.state.favorites.some((f) => f.id === p.id);
 
-async function selectPlace(place: Place, record = true): Promise<void> {
+/**
+ * Load a city's weather and draw it. `fresh` asks the server to skip its cache.
+ * `silent` is the background refresh: no loading state, no error banner, and if
+ * it fails (or the server only has saved data) the screen stays exactly as it was.
+ * Returns true when new weather was drawn.
+ */
+async function selectPlace(place: Place, record = true, opts: { fresh?: boolean; silent?: boolean } = {}): Promise<boolean> {
   const req = ++app.request;
+  const { fresh = false, silent = false } = opts;
   if (app.place?.id !== place.id) app.day = null; // a new city starts on today
   app.place = place;
-  main.classList.add('is-loading');
-  $<HTMLButtonElement>('#refresh').disabled = true;
+  if (!silent) {
+    main.classList.add('is-loading');
+    $<HTMLButtonElement>('#refresh').disabled = true;
+  }
+  let ok = false;
   try {
-    const res = await api.weather(place, app.state.settings.units, app.state.settings.windUnit);
-    if (req !== app.request) return; // a newer selection won
+    const res = await api.weather(place, app.state.settings.units, app.state.settings.windUnit, fresh);
+    if (req !== app.request) return false; // a newer selection won
+    if (silent && res.meta.cache === 'STALE') return false; // upstream is down: keep what we show
     app.weather = res.data;
     app.cache = res.meta.cache;
-    app.loadedAt = Date.now();
     showBanner(res.meta.cache === 'STALE' ? 'Showing saved data: the weather service is unreachable right now.' : null);
     render();
+    ok = true;
+    refresher.markFresh();
   } catch (err) {
-    if (req !== app.request) return;
-    showBanner((err as Error).message, true);
+    if (req !== app.request) return false;
+    if (!silent) showBanner((err as Error).message, true);
   } finally {
-    if (req === app.request) {
+    if (req === app.request && !silent) {
       main.classList.remove('is-loading');
       $<HTMLButtonElement>('#refresh').disabled = false;
     }
@@ -138,12 +164,35 @@ async function selectPlace(place: Place, record = true): Promise<void> {
       })
       .catch(() => {});
   }
+  return ok;
 }
 
+/** The refresh button and the banner's Retry: visible loading state, always fresh data. */
 async function refresh(): Promise<void> {
   if (!app.place) return;
-  await selectPlace(app.place, false);
-  void loadCardWeather(true);
+  await selectPlace(app.place, false, { fresh: true });
+  void loadCardWeather(true, true);
+}
+
+/** The 5-minute refresh: same data path, no spinner, no flicker. */
+async function autoRefresh(): Promise<boolean> {
+  // Don't cut in on a city the user just picked; the next tick tries again.
+  if (!app.place || main.classList.contains('is-loading')) return false;
+  const ok = await selectPlace(app.place, false, { fresh: true, silent: true });
+  void loadCardWeather(true, true);
+  return ok;
+}
+
+/** Once a minute: move the "now" dot, or redraw if the city's hour (or day) has changed. */
+function tickNow(): void {
+  const w = app.weather;
+  if (!w) return;
+  const nowLocal = localIsoIn(w.timezone);
+  if (nowLocal.slice(0, 13) !== app.drawnHour) {
+    render();
+    return;
+  }
+  moveTempNow(nowMarker(w, currentDay(w, nowLocal), nowLocal));
 }
 
 async function toggleFavorite(): Promise<void> {
@@ -160,10 +209,11 @@ async function toggleFavorite(): Promise<void> {
 
 /**
  * Current weather for every favorite and recent city card, through the server
- * cache, a few at a time. Without `all`, only cards that are missing or failed
- * are fetched. A failure marks just that card.
+ * cache (or past it, with `fresh`), a few at a time. Without `all`, only cards
+ * that are missing or failed are fetched. A failure marks just that card, and a
+ * card that already has weather keeps it.
  */
-async function loadCardWeather(all = false): Promise<void> {
+async function loadCardWeather(all = false, fresh = false): Promise<void> {
   const { units, windUnit } = app.state.settings;
   const unique = new Map([...app.state.favorites, ...app.state.recent].map((p) => [p.id, p]));
   const queue = [...unique.values()].filter((p) => all || app.cards.get(p.id)?.status !== 'ok');
@@ -171,7 +221,7 @@ async function loadCardWeather(all = false): Promise<void> {
   const worker = async () => {
     for (let p = queue.shift(); p; p = queue.shift()) {
       try {
-        const { data } = await api.weather(p, units, windUnit);
+        const { data } = await api.weather(p, units, windUnit, fresh);
         if (units !== app.state.settings.units) return; // units changed meanwhile
         app.cards.set(p.id, {
           status: 'ok',
@@ -257,12 +307,12 @@ async function boot(): Promise<void> {
     if (app.weather) tickClock(app.weather.timezone, app.state.settings.timeFormat);
   }, 1000);
 
-  // Keep data fresh; the server cache absorbs repeat requests.
-  window.setInterval(() => void refresh(), REFRESH_MS);
+  // Keep data fresh every 5 minutes while the window is visible; coming back
+  // after being minimized refreshes at once if the data is older than that.
+  refresher.start();
+  document.addEventListener('visibilitychange', () => refresher.onVisible());
   window.setInterval(renderUpdated, 30_000);
-  window.addEventListener('focus', () => {
-    if (app.place && Date.now() - app.loadedAt > REFRESH_MS) void refresh();
-  });
+  window.setInterval(tickNow, 60_000);
 
   try {
     app.state = await api.state();

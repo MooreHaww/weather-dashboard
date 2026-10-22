@@ -31,8 +31,9 @@ export const api = {
   geocode: (q: string, signal?: AbortSignal) =>
     call<GeocodeResponse>(`/api/geocode?q=${encodeURIComponent(q)}`, { signal }),
 
-  weather: (p: Pick<Place, 'latitude' | 'longitude'>, units: Units, wind: WindUnit) =>
-    call<WeatherResponse>(`/api/weather?lat=${p.latitude}&lon=${p.longitude}&units=${units}&wind=${wind}`),
+  /** `fresh` asks the server to skip its cached copy (auto-refresh and the refresh button). */
+  weather: (p: Pick<Place, 'latitude' | 'longitude'>, units: Units, wind: WindUnit, fresh = false) =>
+    call<WeatherResponse>(`/api/weather?lat=${p.latitude}&lon=${p.longitude}&units=${units}&wind=${wind}${fresh ? '&fresh=1' : ''}`),
 
   addFavorite: (p: Place) => call<Place[]>(`/api/favorites/${p.id}`, { method: 'PUT', body: JSON.stringify(p) }),
   removeFavorite: (id: number) => call<Place[]>(`/api/favorites/${id}`, { method: 'DELETE' }),

@@ -1,6 +1,7 @@
 // The Rain and Temperature cards for the selected day (today by default).
 
 import { rainHoursForDay, rainSummary } from '../../shared/rain';
+import { passedInfo, type NowMarker } from '../../shared/passed';
 import { formatHour, shortDate, weekday } from '../../shared/time';
 import type { TimeFormat, WeatherData } from '../../shared/types';
 import { describeWeather } from '../../shared/weatherCodes';
@@ -20,8 +21,8 @@ interface StripPoint extends TempPoint {
   isDay: boolean;
 }
 
-/** Hours shown for a day: today = now + next 24 h; other days = midnight to 11 pm. */
-function tempPoints(w: WeatherData, day: string, nowLocal: string): StripPoint[] {
+/** Every selected day, today included, is shown from midnight to 11 pm in the city's own time. */
+function tempPoints(w: WeatherData, day: string): StripPoint[] {
   const h = w.hourly;
   const point = (i: number): StripPoint => ({
     time: h.time[i]!,
@@ -30,11 +31,13 @@ function tempPoints(w: WeatherData, day: string, nowLocal: string): StripPoint[]
     weatherCode: h.weatherCode[i]!,
     isDay: h.isDay[i]!,
   });
-  if (day === nowLocal.slice(0, 10)) {
-    const start = Math.max(0, h.time.findIndex((t) => t.slice(0, 13) === nowLocal.slice(0, 13)));
-    return h.time.slice(start, start + 25).map((_, i) => point(start + i));
-  }
   return h.time.flatMap((t, i) => (t.startsWith(day) ? [point(i)] : []));
+}
+
+/** Where "now" sits on today's points, or null for any other day. */
+export function nowMarker(w: WeatherData, day: string, nowLocal: string): NowMarker | null {
+  if (day !== nowLocal.slice(0, 10)) return null;
+  return passedInfo(tempPoints(w, day).map((p) => p.time), nowLocal);
 }
 
 function table(id: string, caption: string, head: string[], rows: string[][]): void {
@@ -84,9 +87,10 @@ export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, 
   $('#rain-data').dataset.values = JSON.stringify(hours.map((h) => [h.time, h.probability]));
 
   // ----- Temperature -----
-  const points = tempPoints(w, day, nowLocal);
+  const points = tempPoints(w, day);
+  const now = nowMarker(w, day, nowLocal);
   const unit = w.unitLabels.temperature;
-  $('#temp-title').textContent = isToday ? 'Temperature · next 24 hours' : `Temperature · ${name}`;
+  $('#temp-title').textContent = isToday ? 'Temperature · Today' : `Temperature · ${name}`;
   if (points.length) {
     const hi = points.reduce((a, b) => (b.temperature > a.temperature ? b : a));
     const lo = points.reduce((a, b) => (b.temperature < a.temperature ? b : a));
@@ -97,18 +101,19 @@ export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, 
   const strip = $('#temp-strip');
   strip.innerHTML = points
     .map((p, i) => ({ p, i }))
-    .filter(({ i }) => i % STRIP_EVERY === 0)
+    // Today's strip has an item for the current hour; items right next to it make room.
+    .filter(({ i }) => (now ? i === now.index || (i % STRIP_EVERY === 0 && Math.abs(i - now.index) > 2) : i % STRIP_EVERY === 0))
     .map(({ p, i }) => {
       const info = describeWeather(p.weatherCode);
       return `<div class="hour" data-index="${i}" title="${esc(info.label)}">
-          <span class="hour-time">${i === 0 && isToday ? 'Now' : hour(p.time)}</span>
+          <span class="hour-time">${now && i === now.index ? 'Now' : hour(p.time)}</span>
           ${weatherIcon(info.icon, p.isDay, 'wx-icon hour-icon')}
           <span class="hour-temp">${round(p.temperature)}°</span>
         </div>`;
     })
     .join('');
 
-  renderTempChart($<HTMLCanvasElement>('#temp-chart'), points, unit, isToday, format, (xs) => positionStrip(strip, xs));
+  renderTempChart($<HTMLCanvasElement>('#temp-chart'), points, unit, now, format, (xs) => positionStrip(strip, xs));
   table(
     'temp-data',
     `Hourly temperature, ${name}`,

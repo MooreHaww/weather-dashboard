@@ -12,6 +12,7 @@ import {
   type Plugin,
   type ScriptableContext,
 } from 'chart.js';
+import type { NowMarker } from '../shared/passed';
 import type { HourPoint } from '../shared/rain';
 import { formatHour } from '../shared/time';
 import type { TimeFormat } from '../shared/types';
@@ -36,6 +37,9 @@ export const SERIES_COLORS = {
   feelsLike: '#C4B5FD',
   rain: 'rgba(90, 176, 255, 1)',
   rainHighlight: '#7CC4FF',
+  // Hours that have already passed today: no colour, just grey.
+  passed: 'rgba(148, 163, 184, 0.5)',
+  passedFeelsLike: 'rgba(148, 163, 184, 0.38)',
 };
 
 const GRID = 'rgba(255, 255, 255, 0.06)';
@@ -60,6 +64,13 @@ export type LayoutListener = (xs: number[]) => void;
 let tempChart: Chart<'line'> | null = null;
 let rainChart: Chart<'bar'> | null = null;
 let onTempLayout: LayoutListener | null = null;
+/** Fractional point position of "now" on today's chart, or null on other days. */
+let nowPos: number | null = null;
+
+// Datasets 0 and 1 are the coloured lines; 2 and 3 are grey copies of the same
+// data. The coloured pair is clipped to the part of the chart after "now" and
+// the grey pair to the part before it, so the split falls at the exact minute.
+const PASSED_DATASETS = new Set([2, 3]);
 
 const reportLayout: Plugin<'line'> = {
   id: 'reportLayout',
@@ -71,18 +82,109 @@ const reportLayout: Plugin<'line'> = {
   },
 };
 
+const nowSplit: Plugin<'line'> = {
+  id: 'nowSplit',
+  beforeDatasetDraw(chart, args) {
+    const { ctx, chartArea: a, scales } = chart;
+    const passed = PASSED_DATASETS.has(args.index);
+    let x0 = a.left;
+    let x1 = a.right;
+    if (nowPos === null) {
+      if (passed) x1 = x0; // nothing has passed on another day
+    } else {
+      const x = scales.x.getPixelForValue(nowPos);
+      if (passed) x1 = x;
+      else x0 = x;
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x0, a.top - 6, Math.max(0, x1 - x0), a.bottom - a.top + 12);
+    ctx.clip();
+  },
+  afterDatasetDraw(chart) {
+    chart.ctx.restore();
+  },
+};
+
+interface CurvePoint {
+  x: number;
+  y: number;
+  cp1x?: number;
+  cp1y?: number;
+  cp2x?: number;
+  cp2y?: number;
+}
+
+/** The point on the drawn (curved) temperature line at x = `targetX`, between points a and b. */
+function pointOnLine(a: CurvePoint, b: CurvePoint, targetX: number): { x: number; y: number } {
+  if (a.x === b.x) return { x: a.x, y: a.y };
+  const c1 = { x: a.cp2x ?? a.x, y: a.cp2y ?? a.y };
+  const c2 = { x: b.cp1x ?? b.x, y: b.cp1y ?? b.y };
+  const at = (t: number, p0: number, p1: number, p2: number, p3: number) =>
+    (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t ** 2 * p2 + t ** 3 * p3;
+  let lo = 0;
+  let hi = 1;
+  for (let k = 0; k < 24; k++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid, a.x, c1.x, c2.x, b.x) < targetX) lo = mid;
+    else hi = mid;
+  }
+  const t = (lo + hi) / 2;
+  return { x: at(t, a.x, c1.x, c2.x, b.x), y: at(t, a.y, c1.y, c2.y, b.y) };
+}
+
+const nowDot: Plugin<'line'> = {
+  id: 'nowDot',
+  afterDatasetsDraw(chart) {
+    const canvas = chart.canvas;
+    const data = chart.getDatasetMeta(0).data as unknown as CurvePoint[];
+    if (nowPos === null || data.length === 0) {
+      delete canvas.dataset.nowX; // for tests
+      delete canvas.dataset.nowY;
+      return;
+    }
+    const i = Math.min(Math.max(Math.floor(nowPos), 0), data.length - 1);
+    const targetX = chart.scales.x.getPixelForValue(nowPos);
+    const { x, y } = pointOnLine(data[i]!, data[Math.min(i + 1, data.length - 1)]!, targetX);
+    canvas.dataset.nowX = x.toFixed(1);
+    canvas.dataset.nowY = y.toFixed(1);
+
+    const { ctx } = chart;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 181, 71, 0.28)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = SERIES_COLORS.temperature;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.stroke();
+    ctx.restore();
+  },
+};
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Move the "now" dot and the colour split without rebuilding the chart (the minute tick). */
+export function moveTempNow(now: NowMarker | null): void {
+  nowPos = now ? now.pos : null;
+  tempChart?.update('none');
+}
 
 export function renderTempChart(
   canvas: HTMLCanvasElement,
   points: TempPoint[],
   unit: string,
-  firstIsNow: boolean,
+  now: NowMarker | null,
   format: TimeFormat,
   onLayout: LayoutListener,
 ): void {
   onTempLayout = onLayout;
-  const labels = points.map((p, i) => (i === 0 && firstIsNow ? 'Now' : formatHour(p.time, false, format)));
+  nowPos = now ? now.pos : null;
+  const labels = points.map((p, i) => (now && i === now.index ? 'Now' : formatHour(p.time, false, format)));
   canvas.dataset.labels = JSON.stringify(labels); // for tests; the canvas itself is not readable
   const temps = points.map((p) => round1(p.temperature));
   const feels = points.map((p) => round1(p.feelsLike));
@@ -90,12 +192,20 @@ export function renderTempChart(
 
   if (tempChart) {
     tempChart.data.labels = labels;
-    tempChart.data.datasets[0]!.data = temps;
-    tempChart.data.datasets[1]!.data = feels;
+    for (const [i, data] of [temps, feels, temps, feels].entries()) tempChart.data.datasets[i]!.data = data;
     tempChart.options.plugins!.tooltip!.callbacks!.label = label;
     tempChart.update();
     return;
   }
+
+  const fill = (top: string) => (ctx: ScriptableContext<'line'>) => {
+    const area = ctx.chart.chartArea;
+    if (!area) return 'transparent';
+    const g = ctx.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+    g.addColorStop(0, top);
+    g.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    return g;
+  };
 
   tempChart = new Chart(canvas, {
     type: 'line',
@@ -112,15 +222,7 @@ export function renderTempChart(
           pointRadius: 0,
           pointHoverRadius: 5,
           pointHoverBackgroundColor: SERIES_COLORS.temperature,
-          backgroundColor: (ctx: ScriptableContext<'line'>) => {
-            const { chart } = ctx;
-            const area = chart.chartArea;
-            if (!area) return 'transparent';
-            const g = chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
-            g.addColorStop(0, 'rgba(255, 181, 71, 0.32)');
-            g.addColorStop(1, 'rgba(255, 181, 71, 0)');
-            return g;
-          },
+          backgroundColor: fill('rgba(255, 181, 71, 0.32)'),
         },
         {
           label: 'Feels like',
@@ -134,6 +236,28 @@ export function renderTempChart(
           pointHoverRadius: 4,
           pointHoverBackgroundColor: SERIES_COLORS.feelsLike,
         },
+        {
+          label: 'Temperature (passed)',
+          data: temps,
+          borderColor: SERIES_COLORS.passed,
+          borderWidth: 2.5,
+          tension: 0.4,
+          fill: true,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          backgroundColor: fill('rgba(148, 163, 184, 0.16)'),
+        },
+        {
+          label: 'Feels like (passed)',
+          data: feels,
+          borderColor: SERIES_COLORS.passedFeelsLike,
+          borderWidth: 2,
+          borderDash: [5, 4],
+          tension: 0.4,
+          fill: false,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+        },
       ],
     },
     options: {
@@ -142,7 +266,8 @@ export function renderTempChart(
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        tooltip: { ...tooltip, callbacks: { label } },
+        // The grey copies only repaint the passed part; the tooltip lists each series once.
+        tooltip: { ...tooltip, filter: (item) => !PASSED_DATASETS.has(item.datasetIndex), callbacks: { label } },
       },
       scales: {
         // The hourly strip under the chart is the time axis, so no tick labels here.
@@ -150,7 +275,7 @@ export function renderTempChart(
         y: { grid: { color: GRID }, border: { display: false }, grace: '5%', ticks: { callback: (v) => `${v}°`, maxTicksLimit: 5 } },
       },
     },
-    plugins: [reportLayout],
+    plugins: [reportLayout, nowSplit, nowDot],
   });
 }
 

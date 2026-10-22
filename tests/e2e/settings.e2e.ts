@@ -6,7 +6,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { COLORS, countPixels, launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
+import { launchApp, temperaturePainted, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 
 const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69171, country: 'Japan', countryCode: 'JP' };
 
@@ -150,7 +150,7 @@ describe('settings panel', () => {
     const before = await page.evaluate<string>(`document.getElementById('clock-time').textContent`);
     await new Promise((r) => setTimeout(r, 1300));
     expect(await page.evaluate<string>(`document.getElementById('clock-time').textContent`)).not.toBe(before);
-    expect(await page.evaluate<number>(countPixels('temp-chart', COLORS.temperature))).toBeGreaterThan(150);
+    expect(await page.evaluate<number>(temperaturePainted())).toBeGreaterThan(150);
   });
 
   it('Escape closes it and focus returns to the gear', async () => {
@@ -281,7 +281,7 @@ describe('settings panel', () => {
   });
 
   it('Time format: 24-hour updates the clock, strip, chart labels, sun times and rain line at once', async () => {
-    await page.waitFor(`${countPixels('temp-chart', COLORS.temperature)} > 150`, 8000);
+    await page.waitFor(`${temperaturePainted()} > 150`, 8000);
     expect(await clockText()).toMatch(/(AM|PM)$/);
     await openPanel();
     await chooseOption('24h');
@@ -295,8 +295,9 @@ describe('settings panel', () => {
     expect(rain.length).toBeGreaterThan(0);
     expect(rain.every((l) => /^\d{2}:00$/.test(l))).toBe(true);
     const temp = await chartLabels('temp-chart');
-    expect(temp[0]).toBe('Now');
-    expect(temp.slice(1).every((l) => /^\d{2}:00$/.test(l))).toBe(true);
+    expect(temp).toHaveLength(24);
+    expect(temp.filter((l) => l === 'Now')).toHaveLength(1);
+    expect(temp.filter((l) => l !== 'Now').every((l) => /^\d{2}:00$/.test(l))).toBe(true);
     expect(await statText('Sunrise')).toMatch(/^\d{2}:\d{2}$/);
     expect(await statText('Sunset')).toMatch(/^\d{2}:\d{2}$/);
     const text = await page.evaluate<string>(
@@ -356,7 +357,7 @@ describe('settings panel', () => {
   });
 
   it('charts are still drawn after all of that', async () => {
-    await page.waitFor(`${countPixels('temp-chart', COLORS.temperature)} > 150`, 8000);
+    await page.waitFor(`${temperaturePainted()} > 150`, 8000);
   });
 
   it('threw no errors', () => {
