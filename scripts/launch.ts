@@ -95,7 +95,8 @@ export interface AppPage {
   emulateReducedMotion(on: boolean): Promise<void>;
   /** Run a script in every page load before the app's own scripts, then reload (e.g. to speed up timers). */
   reloadWithScript(source: string): Promise<void>;
-  screenshot(): Promise<Buffer>;
+  /** A PNG of the window. With `cssPixels`, one image pixel per CSS pixel (smaller files on high-DPI screens). */
+  screenshot(opts?: { cssPixels?: boolean }): Promise<Buffer>;
 }
 
 export interface LaunchedApp {
@@ -238,8 +239,13 @@ export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): P
       await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source });
       await cdp.send('Page.reload');
     },
-    async screenshot() {
-      const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png' });
+    async screenshot(opts) {
+      let clip: object | undefined;
+      if (opts?.cssPixels) {
+        const v = await cdp.evaluate<{ w: number; h: number; dpr: number }>(`({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio })`);
+        clip = { x: 0, y: 0, width: v.w, height: v.h, scale: 1 / v.dpr };
+      }
+      const { data } = await cdp.send<{ data: string }>('Page.captureScreenshot', { format: 'png', clip });
       return Buffer.from(data, 'base64');
     },
   };

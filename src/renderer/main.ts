@@ -3,7 +3,7 @@ import type { AppState, CacheStatus, Place, TempLabels, TimeFormat, Units, Weath
 import { describeWeather } from '../shared/weatherCodes';
 import { api } from './api';
 import { moveTempNow } from './charts';
-import { nowMarker, renderDayDetails } from './components/dayDetails';
+import { nowMarker, renderDayDetails, updateNowDot } from './components/dayDetails';
 import { renderForecast, selectDay, setupForecast } from './components/forecast';
 import { renderHero, tickClock } from './components/hero';
 import { setupSearch } from './components/search';
@@ -193,7 +193,9 @@ function tickNow(): void {
     render();
     return;
   }
-  moveTempNow(nowMarker(w, currentDay(w, nowLocal), nowLocal));
+  const marker = nowMarker(w, currentDay(w, nowLocal), nowLocal);
+  moveTempNow(marker);
+  updateNowDot(nowLocal, app.state.settings.timeFormat, marker !== null);
 }
 
 async function toggleFavorite(): Promise<void> {

@@ -12,7 +12,9 @@
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Release](https://img.shields.io/badge/release-v1.3.0-orange?style=for-the-badge)
 
-![Weather Dashboard screenshot](docs/screenshot.png)
+| ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
+|:---:|:---:|:---:|
+| Clear day | Night | Rain |
 
 </div>
 
@@ -78,7 +80,7 @@ npm run dev
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
 | `npm test` | Unit and API tests (128 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (111 tests, needs internet) |
+| `npm run test:e2e` | Launches the real app and checks the UI (117 tests, needs internet) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -188,7 +190,7 @@ Electron main process
 
 #### v1.3 (Fixes)
 - [x] Hourly labels evenly spaced, no empty gaps
-- [x] "Now" label sits exactly under the dot
+- [x] Removed the "Now" label; the dot pulses and the legend says "Current time"
 
 ### v1.4 - Auto-update
 - [ ] Auto-update through GitHub Releases
@@ -227,6 +229,9 @@ Electron main process
 - [ ] Optional long-term history (SQLite, still local)
 
 #### v2.0 (Fixes)
+
+### Later
+- [ ] More themes (still an idea)
 
 ## 📄 Notes
 

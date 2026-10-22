@@ -78,10 +78,14 @@
               <span class="legend" aria-hidden="true">
                 <span><i class="swatch swatch-temp"></i>Temperature</span>
                 <span><i class="swatch swatch-feels"></i>Feels like</span>
+                <span id="legend-now" hidden><span class="pulse-dot"><i class="ring"></i><i class="core"></i></span>Current time</span>
               </span>
             </header>
             <p id="temp-summary" class="temp-summary"></p>
-            <div class="chart-wrap"><canvas id="temp-chart" aria-hidden="true"></canvas></div>
+            <div class="chart-wrap">
+              <canvas id="temp-chart" aria-hidden="true"></canvas>
+              <span id="now-dot" class="pulse-dot now-dot" role="img" hidden><i class="ring"></i><i class="core"></i></span>
+            </div>
             <div id="temp-strip" class="hour-strip" aria-hidden="true"></div>
             <table id="temp-data" class="sr-only"></table>
           </section>

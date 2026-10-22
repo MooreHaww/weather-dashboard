@@ -118,9 +118,8 @@ describe('temperature chart covers the whole day', () => {
     expect(await text('#temp-title')).toBe('Temperature · Today');
     const labels = await page.evaluate<string[]>(`JSON.parse(document.getElementById('temp-chart').dataset.labels)`);
     expect(labels).toHaveLength(24);
-    expect(labels.filter((l) => l === 'Now')).toHaveLength(1);
-    expect(labels[0] === '12 AM' || labels[0] === 'Now').toBe(true);
-    expect(labels[23] === '11 PM' || labels[23] === 'Now').toBe(true);
+    expect(labels[0]).toBe('12 AM');
+    expect(labels[23]).toBe('11 PM');
     const times = await page.evaluate<[string, number, number][]>(`JSON.parse(document.getElementById('temp-data').dataset.values)`);
     expect(times).toHaveLength(24);
     expect(times[0]![0].endsWith('T00:00')).toBe(true);
@@ -128,11 +127,12 @@ describe('temperature chart covers the whole day', () => {
     expect(await text('#temp-summary')).toMatch(/^High -?\d+° at \d{1,2} (AM|PM) · Low -?\d+° at \d{1,2} (AM|PM)$/);
   });
 
-  it('the hourly strip shows every 3rd hour of the day, and "Now" has its own label', async () => {
+  it('the hourly strip is one row showing every 3rd hour of the day', async () => {
     const strip = await page.evaluate<string[]>(`[...document.querySelectorAll('#temp-strip .hour:not([hidden]) .hour-time')].map((e) => e.textContent)`);
     expect(strip).toEqual(['12 AM', '3 AM', '6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM']); // none dropped around "now"
-    expect(await page.evaluate<string>(`getComputedStyle(document.querySelector('#temp-strip .now-label')).visibility`)).toBe('visible');
-    expect(await text('#temp-strip .now-label')).toBe('Now');
+    expect(await page.evaluate<number>(`document.querySelectorAll('#temp-strip .now-label, #temp-strip .now-row').length`)).toBe(0); // no "Now" label
+    const tops = await page.evaluate<number[]>(`[...new Set([...document.querySelectorAll('#temp-strip .hour:not([hidden])')].map((e) => Math.round(e.getBoundingClientRect().top)))]`);
+    expect(tops).toHaveLength(1); // a single row
   });
 
   it('draws the dot at the city\'s current time (Tokyo, whatever the PC clock says)', async () => {
@@ -154,13 +154,17 @@ describe('temperature chart covers the whole day', () => {
     expect(g.nowX!).toBeGreaterThanOrEqual(lo);
     expect(g.nowX!).toBeLessThanOrEqual(hi);
 
-    // And the dot is really painted there: its centre is the series orange.
-    const centre = await page.evaluate<boolean>(`(() => {
-      const c = document.getElementById('temp-chart');
-      const [r, g, b, a] = c.getContext('2d').getImageData(Math.round(${g.nowX} * devicePixelRatio), Math.round(${g.nowY} * devicePixelRatio), 1, 1).data;
-      return a > 150 && r > 220 && g > 140 && g < 210 && b < 120;
+    // The visible dot (an element over the chart) is centred there, with the series orange as its fill.
+    const dot = await page.evaluate<{ x: number; y: number; fill: string; hidden: boolean }>(`(() => {
+      const c = document.getElementById('temp-chart').getBoundingClientRect();
+      const d = document.querySelector('#now-dot');
+      const r = d.querySelector('.core').getBoundingClientRect();
+      return { x: (r.left + r.right) / 2 - c.left, y: (r.top + r.bottom) / 2 - c.top, fill: getComputedStyle(d.querySelector('.core')).backgroundColor, hidden: d.hidden };
     })()`);
-    expect(centre).toBe(true);
+    expect(dot.hidden).toBe(false);
+    expect(Math.abs(dot.x - g.nowX!)).toBeLessThanOrEqual(0.6);
+    expect(Math.abs(dot.y - g.nowY!)).toBeLessThanOrEqual(0.6);
+    expect(dot.fill).toBe('rgb(255, 181, 71)');
   });
 
   it('the part of the day that has passed is grey, the rest keeps its colours', async () => {
@@ -193,11 +197,121 @@ describe('temperature chart covers the whole day', () => {
     expect(await page.evaluate<number>(countPixels('temp-chart', COLORS.passed))).toBe(0);
     const labels = await page.evaluate<string[]>(`JSON.parse(document.getElementById('temp-chart').dataset.labels)`);
     expect(labels).toHaveLength(24);
-    expect(labels).not.toContain('Now');
+    // The dot, its pulse and the legend entry exist only on today.
+    expect(await page.evaluate<boolean>(`getComputedStyle(document.getElementById('now-dot')).display === 'none'`)).toBe(true);
+    expect(await page.evaluate<boolean>(`getComputedStyle(document.getElementById('legend-now')).display === 'none'`)).toBe(true);
 
     await clickDay(0);
     await page.waitFor(`document.getElementById('temp-title').textContent === 'Temperature · Today'`, 3000);
     await page.waitFor(`document.getElementById('temp-chart').dataset.nowX !== undefined`, 8000);
+  });
+
+  it('the legend has "Current time" with a small copy of the dot, in the same style as the other two entries', async () => {
+    const legend = await page.evaluate<{ texts: string[]; nowShown: boolean; sameStyle: boolean; hasRing: boolean; hasCore: boolean }>(`(() => {
+      const items = [...document.querySelectorAll('.legend > span')];
+      const now = document.getElementById('legend-now');
+      const cs = (e) => getComputedStyle(e);
+      return {
+        texts: items.map((e) => e.textContent.trim()),
+        nowShown: cs(now).display !== 'none',
+        sameStyle: cs(now).fontSize === cs(items[0]).fontSize && cs(now).color === cs(items[0]).color && cs(now).display === cs(items[0]).display && cs(now).columnGap === cs(items[0]).columnGap,
+        hasRing: now.querySelector('.ring') !== null,
+        hasCore: now.querySelector('.core') !== null,
+      };
+    })()`);
+    expect(legend.texts).toEqual(['Temperature', 'Feels like', 'Current time']);
+    expect(legend.nowShown).toBe(true);
+    expect(legend.sameStyle).toBe(true);
+    expect(legend.hasRing && legend.hasCore).toBe(true);
+  });
+
+  it('the legend stays inside the card at narrow widths (it wraps instead of overflowing)', async () => {
+    for (const width of [480, 600, 1000]) {
+      await app.resize(width, 900);
+      await new Promise((r) => setTimeout(r, 600));
+      const r = await page.evaluate<{ legendRight: number; cardRight: number; cardLeft: number; legendLeft: number; scrollsX: boolean }>(`(() => {
+        const l = document.querySelector('#temp-title').closest('.card').querySelector('.legend').getBoundingClientRect();
+        const c = document.querySelector('#temp-title').closest('.card').getBoundingClientRect();
+        const layout = document.querySelector('.layout');
+        return { legendRight: l.right, cardRight: c.right, legendLeft: l.left, cardLeft: c.left, scrollsX: layout.scrollWidth > layout.clientWidth + 1 };
+      })()`);
+      expect(r.legendRight, `${width}px`).toBeLessThanOrEqual(r.cardRight);
+      expect(r.legendLeft, `${width}px`).toBeGreaterThanOrEqual(r.cardLeft);
+      expect(r.scrollsX, `${width}px`).toBe(false);
+    }
+    await app.resize(1360, 900);
+    await new Promise((r) => setTimeout(r, 600));
+  });
+
+  const ringState = () =>
+    page.evaluate<{ name: string; duration: string; iterations: string; opacity: number; transform: string }[]>(`(() => {
+      return ['#now-dot .ring', '#legend-now .ring'].map((sel) => {
+        const cs = getComputedStyle(document.querySelector(sel));
+        return { name: cs.animationName, duration: cs.animationDuration, iterations: cs.animationIterationCount, opacity: Number(cs.opacity), transform: cs.transform };
+      });
+    })()`);
+  const sample = async (n = 4, gap = 250) => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push(await ringState());
+      await new Promise((r) => setTimeout(r, gap));
+    }
+    return out;
+  };
+
+  it('the outer ring pulses: a 2 s looping animation whose opacity and size change over time', async () => {
+    const samples = await sample();
+    for (const which of [0, 1]) {
+      expect(samples[0]![which]!.name).toBe('now-pulse');
+      expect(samples[0]![which]!.duration).toBe('2s');
+      expect(samples[0]![which]!.iterations).toBe('infinite');
+      expect(new Set(samples.map((s) => s[which]!.opacity)).size, `ring ${which} opacity should change`).toBeGreaterThan(1);
+      expect(new Set(samples.map((s) => s[which]!.transform)).size, `ring ${which} size should change`).toBeGreaterThan(1);
+    }
+    // The centre dot and its white ring stay still: no animation on them.
+    expect(await page.evaluate<string[]>(`['#now-dot .core', '#legend-now .core'].map((s) => getComputedStyle(document.querySelector(s)).animationName)`)).toEqual(['none', 'none']);
+  });
+
+  it('with reduced motion there is no pulse, just a static ring', async () => {
+    await page.emulateReducedMotion(true);
+    try {
+      const samples = await sample(3, 250);
+      for (const which of [0, 1]) {
+        expect(samples[0]![which]!.name).toBe('none');
+        expect(new Set(samples.map((s) => s[which]!.opacity)).size).toBe(1);
+        expect(new Set(samples.map((s) => s[which]!.transform)).size).toBe(1);
+        expect(samples[0]![which]!.opacity).toBeGreaterThan(0.2); // the ring is still visible
+      }
+    } finally {
+      await page.emulateReducedMotion(false);
+    }
+    expect((await ringState())[0]!.name).toBe('now-pulse'); // and it pulses again afterwards
+  });
+
+  it('the dot has an accessible name and tooltip with the city\'s current time, in the chosen format', async () => {
+    const read = () => page.evaluate<{ label: string | null; title: string; role: string | null }>(`(() => { const d = document.getElementById('now-dot'); return { label: d.getAttribute('aria-label'), title: d.title, role: d.getAttribute('role') }; })()`);
+    const t = localIsoIn('Asia/Tokyo');
+    const h = Number(t.slice(11, 13));
+    const m = Number(t.slice(14, 16));
+    const mins = (hh: number, mm: number) => hh * 60 + mm;
+    const near = (hh: number, mm: number) => Math.min(Math.abs(mins(hh, mm) - mins(h, m)), 1440 - Math.abs(mins(hh, mm) - mins(h, m))) <= 2;
+
+    const a = await read();
+    expect(a.role).toBe('img');
+    expect(a.title).toBe(a.label);
+    const m12 = a.label!.match(/^Current time: (\d{1,2}):(\d{2}) (AM|PM)$/);
+    expect(m12, a.label!).not.toBeNull();
+    expect(near((Number(m12![1]) % 12) + (m12![3] === 'PM' ? 12 : 0), Number(m12![2]))).toBe(true);
+
+    await page.evaluate(`document.querySelector('#settings-sections button[data-value="24h"]').click()`);
+    await page.waitFor(`/^Current time: \\d{2}:\\d{2}$/.test(document.getElementById('now-dot').getAttribute('aria-label'))`, 3000);
+    const b = await read();
+    expect(b.title).toBe(b.label);
+    const m24 = b.label!.match(/^Current time: (\d{2}):(\d{2})$/)!;
+    expect(near(Number(m24[1]), Number(m24[2]))).toBe(true);
+
+    await page.evaluate(`document.querySelector('#settings-sections button[data-value="12h"]').click()`);
+    await page.waitFor(`/(AM|PM)$/.test(document.getElementById('now-dot').getAttribute('aria-label'))`, 3000);
   });
 
   it('the one-minute tick keeps the dot where the city\'s time says (no jump, no errors)', async () => {

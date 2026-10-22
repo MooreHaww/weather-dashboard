@@ -58,16 +58,8 @@ export interface TempPoint {
   feelsLike: number;
 }
 
-/**
- * After every layout: the x pixel of each data point, and of "now" (null on other
- * days), relative to the canvas. "Now" comes from the same scale the dot is drawn
- * with, so anything placed from these numbers lines up with the dot exactly.
- */
-export interface TempLayout {
-  xs: number[];
-  nowX: number | null;
-}
-export type LayoutListener = (layout: TempLayout) => void;
+/** x pixel of each data point, relative to the canvas, after every layout. */
+export type LayoutListener = (xs: number[]) => void;
 
 /** Room the plot leaves at its edges so the hourly strip's labels fit under the first and last points. */
 export const TEMP_CHART_PADDING = { left: 6, right: 22 };
@@ -89,10 +81,7 @@ const reportLayout: Plugin<'line'> = {
     const x = chart.scales.x;
     if (!x || !onTempLayout) return;
     const n = chart.data.labels?.length ?? 0;
-    onTempLayout({
-      xs: Array.from({ length: n }, (_, i) => x.getPixelForValue(i)),
-      nowX: nowPos === null ? null : x.getPixelForValue(nowPos),
-    });
+    onTempLayout(Array.from({ length: n }, (_, i) => x.getPixelForValue(i)));
   },
 };
 
@@ -147,36 +136,34 @@ function pointOnLine(a: CurvePoint, b: CurvePoint, targetX: number): { x: number
   return { x: at(t, a.x, c1.x, c2.x, b.x), y: at(t, a.y, c1.y, c2.y, b.y) };
 }
 
+/**
+ * The "current time" dot is a small HTML element laid over the chart (#now-dot, in
+ * .chart-wrap), not drawn on the canvas, so its pulsing ring can be a plain CSS
+ * animation: the browser runs it on the compositor and the chart is never redrawn
+ * for it. This plugin only moves the element to the line's point for "now" whenever
+ * the chart draws (while it animates in, on resize and on the minute tick).
+ */
 const nowDot: Plugin<'line'> = {
   id: 'nowDot',
   afterDatasetsDraw(chart) {
     const canvas = chart.canvas;
+    const dot = canvas.parentElement?.querySelector<HTMLElement>('.now-dot');
     const data = chart.getDatasetMeta(0).data as unknown as CurvePoint[];
     if (nowPos === null || data.length === 0) {
       delete canvas.dataset.nowX; // for tests
       delete canvas.dataset.nowY;
+      if (dot) dot.hidden = true;
       return;
     }
     const i = Math.min(Math.max(Math.floor(nowPos), 0), data.length - 1);
     const targetX = chart.scales.x.getPixelForValue(nowPos);
     const { x, y } = pointOnLine(data[i]!, data[Math.min(i + 1, data.length - 1)]!, targetX);
-    canvas.dataset.nowX = x.toFixed(1);
-    canvas.dataset.nowY = y.toFixed(1);
-
-    const { ctx } = chart;
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, 9, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 181, 71, 0.28)';
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, Math.PI * 2);
-    ctx.fillStyle = SERIES_COLORS.temperature;
-    ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.stroke();
-    ctx.restore();
+    canvas.dataset.nowX = x.toFixed(2);
+    canvas.dataset.nowY = y.toFixed(2);
+    if (dot) {
+      dot.hidden = false;
+      dot.style.transform = `translate(${x}px, ${y}px)`;
+    }
   },
 };
 
@@ -199,7 +186,7 @@ export function renderTempChart(
   onTempLayout = onLayout;
   // The line ends at the last point (11 PM), so during the final hour the dot rests there.
   nowPos = now ? Math.min(now.pos, points.length - 1) : null;
-  const labels = points.map((p, i) => (now && i === now.index ? 'Now' : formatHour(p.time, false, format)));
+  const labels = points.map((p) => formatHour(p.time, false, format));
   canvas.dataset.labels = JSON.stringify(labels); // for tests; the canvas itself is not readable
   const temps = points.map((p) => round1(p.temperature));
   const feels = points.map((p) => round1(p.feelsLike));

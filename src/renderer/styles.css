@@ -380,23 +380,14 @@ a:hover { text-decoration: underline; }
 .rain-summary.is-chance .glyph { color: var(--rain); }
 .temp-summary { color: var(--text); }
 
-.legend { display: inline-flex; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.legend { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 .legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .swatch { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid var(--temp); }
 .swatch-feels { border-top: 2px dashed var(--feels); }
 
-/* Hourly strip under the temperature chart. JS places every item by the chart's own x
-   positions (see positionStrip), and sets each item's width inline. "Now" has a row to
-   itself above the hours, so it can sit exactly under the dot without touching a label. */
-.hour-strip { margin-top: 4px; }
-.now-row { position: relative; height: 20px; }
-.now-label {
-  position: absolute; top: 0; text-align: center; box-sizing: border-box;
-  font-size: 11px; font-weight: 700; line-height: 18px; color: var(--temp);
-  border-radius: 9px; background: rgba(255, 181, 71, 0.16);
-  visibility: hidden; /* shown by JS on today's chart */
-}
-.hours { position: relative; height: 66px; }
+/* Hourly strip under the temperature chart: one row. JS places every item by the chart's own
+   x positions (see positionStrip) and sets each item's width inline. */
+.hour-strip { position: relative; height: 66px; margin-top: 6px; }
 .hour {
   position: absolute; top: 0;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
@@ -406,6 +397,31 @@ a:hover { text-decoration: underline; }
 .hour-time { color: var(--muted); white-space: nowrap; }
 .hour-icon { width: 28px; height: 28px; }
 .hour-temp { font-weight: 600; font-size: 13px; }
+
+/* The "current time" dot: a yellow centre with a white ring, and an outer hollow yellow ring that
+   pulses like a live indicator. Used on the chart (#now-dot, moved by JS) and in the legend. The
+   pulse is a CSS animation on the ring only, so it never redraws the chart. */
+.pulse-dot { position: relative; display: inline-block; width: 12px; height: 12px; flex: none; }
+.pulse-dot[hidden] { display: none; }
+.pulse-dot .core {
+  position: absolute; inset: 0; box-sizing: border-box; border-radius: 50%;
+  background: var(--temp); border: 2px solid rgba(255, 255, 255, 0.95);
+}
+.pulse-dot .ring {
+  position: absolute; inset: -5px; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+  border: 1.5px solid var(--temp);
+  animation: now-pulse 2s ease-out infinite;
+}
+@keyframes now-pulse {
+  from { transform: scale(0.55); opacity: 0.9; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+.now-dot { position: absolute; left: -6px; top: -6px; will-change: transform; }
+.legend > span[hidden] { display: none; }
+.legend .pulse-dot { margin: 0 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot .ring { animation: none; opacity: 0.55; transform: scale(1); }
+}
 
 /* ---------- 7-day forecast (a radio group of day cards) ---------- */
 

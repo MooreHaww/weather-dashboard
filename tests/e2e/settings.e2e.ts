@@ -298,8 +298,7 @@ describe('settings panel', () => {
     expect(rain.every((l) => /^\d{2}:00$/.test(l))).toBe(true);
     const temp = await chartLabels('temp-chart');
     expect(temp).toHaveLength(24);
-    expect(temp.filter((l) => l === 'Now')).toHaveLength(1);
-    expect(temp.filter((l) => l !== 'Now').every((l) => /^\d{2}:00$/.test(l))).toBe(true);
+    expect(temp.every((l) => /^\d{2}:00$/.test(l))).toBe(true);
     expect(await statText('Sunrise')).toMatch(/^\d{2}:\d{2}$/);
     expect(await statText('Sunset')).toMatch(/^\d{2}:\d{2}$/);
     const text = await page.evaluate<string>(

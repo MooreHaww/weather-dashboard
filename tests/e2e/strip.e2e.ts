@@ -1,6 +1,6 @@
 // The hourly strip under the temperature chart, measured from the real layout:
-// equal spacing, nothing overlapping or clipped, and the "Now" label centred on
-// the dot, at every window width and for every "Time labels" setting.
+// one row, equal spacing, nothing overlapping or clipped, at every window width and
+// for every "Time labels" setting; and the current-time dot sitting at the right x.
 // Real Electron window, live Open-Meteo. Run with: npm run test:e2e
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -46,21 +46,23 @@ interface Measure {
   step: number;
   requested: number;
   shown: { i: number; text: string; cx: number; box: Box; textWidth: number }[];
-  now: { visible: boolean; cx: number; box: Box } | null;
+  /** The dot over the chart: its centre (CSS px from the canvas's left), whether it is shown, and the x the chart reports. */
+  dot: { visible: boolean; cx: number; cy: number };
   nowX: number | null;
+  noNowLabel: boolean;
   strip: Box;
   card: Box;
-  canvasLeft: number;
 }
 
 /** Real positions, in CSS pixels relative to the temperature canvas. */
 const MEASURE = `(() => {
   const canvas = document.getElementById('temp-chart');
   const strip = document.getElementById('temp-strip');
-  const cl = canvas.getBoundingClientRect().left;
+  const cr = canvas.getBoundingClientRect();
+  const cl = cr.left;
   const rel = (r) => ({ left: r.left - cl, right: r.right - cl, top: r.top, bottom: r.bottom });
-  const nowEl = strip.querySelector('.now-label');
-  const nr = nowEl.getBoundingClientRect();
+  const dotEl = document.getElementById('now-dot');
+  const core = dotEl.querySelector('.core').getBoundingClientRect();
   return {
     width: innerWidth,
     step: Number(strip.dataset.step),
@@ -69,11 +71,11 @@ const MEASURE = `(() => {
       const r = e.getBoundingClientRect();
       return { i: Number(e.dataset.index), text: e.querySelector('.hour-time').textContent, cx: (r.left + r.right) / 2 - cl, box: rel(r), textWidth: e.querySelector('.hour-time').getBoundingClientRect().width };
     }),
-    now: { visible: getComputedStyle(nowEl).visibility === 'visible', cx: (nr.left + nr.right) / 2 - cl, box: rel(nr) },
+    dot: { visible: getComputedStyle(dotEl).display !== 'none', cx: (core.left + core.right) / 2 - cl, cy: (core.top + core.bottom) / 2 - cr.top },
     nowX: canvas.dataset.nowX === undefined ? null : Number(canvas.dataset.nowX),
+    noNowLabel: strip.querySelector('.now-label, .now-row') === null,
     strip: rel(strip.getBoundingClientRect()),
     card: rel(strip.closest('.card').getBoundingClientRect()),
-    canvasLeft: cl,
   };
 })()`;
 
@@ -112,20 +114,32 @@ function expectStripIsSound(m: Measure, label: string, opts: { today: boolean })
     expect(s.box.right, `${ctx} ${s.text} clipped on the right`).toBeLessThanOrEqual(m.strip.right + 0.5);
   });
 
-  const now = m.now!;
+  // One row: no "Now" label, and every label at the same height.
+  expect(m.noNowLabel, ctx).toBe(true);
+  expect(new Set(m.shown.map((x) => Math.round(x.box.top))).size, `${ctx} one row`).toBe(1);
+
   if (!opts.today) {
-    expect(now.visible, ctx).toBe(false);
+    expect(m.dot.visible, ctx).toBe(false);
     expect(m.nowX, ctx).toBeNull();
     return;
   }
-  expect(now.visible, ctx).toBe(true);
+  expect(m.dot.visible, ctx).toBe(true);
   expect(m.nowX, ctx).not.toBeNull();
-  // "Now" is centred on the dot, within 1 px.
-  expect(Math.abs(now.cx - m.nowX!), `${ctx}: Now ${now.cx.toFixed(2)} vs dot ${m.nowX}`).toBeLessThanOrEqual(1);
-  // It is on its own row: above the hour labels, never on top of one, and not clipped.
-  m.shown.forEach((s) => expect(now.box.bottom, `${ctx} Now overlaps ${s.text}`).toBeLessThanOrEqual(s.box.top + 0.5));
-  expect(now.box.left, ctx).toBeGreaterThanOrEqual(m.strip.left - 0.5);
-  expect(now.box.right, ctx).toBeLessThanOrEqual(m.strip.right + 0.5);
+  // The visible dot is where the chart says "now" is.
+  expect(Math.abs(m.dot.cx - m.nowX!), `${ctx}: dot ${m.dot.cx.toFixed(2)} vs chart ${m.nowX}`).toBeLessThanOrEqual(0.6);
+}
+
+/**
+ * The dot sits at the x of the city's time on the hour labels' own scale: the first and last
+ * labels give hours-to-pixels, so the expected x for hour + minutes can be computed from them.
+ * The line ends at 11 PM, so the dot rests there during the last hour.
+ */
+function expectDotAtTime(m: Measure, hh: number, mm: number, label: string) {
+  const first = m.shown[0]!;
+  const last = m.shown[m.shown.length - 1]!;
+  const perHour = (last.cx - first.cx) / (last.i - first.i);
+  const expected = first.cx + (Math.min(hh + mm / 60, 23) - first.i) * perHour;
+  expect(Math.abs(m.dot.cx - expected), `${label}: dot ${m.dot.cx.toFixed(2)} expected ${expected.toFixed(2)}`).toBeLessThanOrEqual(1.5);
 }
 
 for (const step of ['3h', '2h', '1h'] as TempLabels[]) {
@@ -142,7 +156,7 @@ for (const step of ['3h', '2h', '1h'] as TempLabels[]) {
       await app?.close();
     });
 
-    it.each(WIDTHS)('is evenly spaced, unclipped, with "Now" under the dot, at %ipx wide', async (width) => {
+    it.each(WIDTHS)('is one evenly spaced, unclipped row, with the dot where the chart says, at %ipx wide', async (width) => {
       await app.resize(width, 900);
       await settle();
       const m = await measure();
@@ -150,7 +164,7 @@ for (const step of ['3h', '2h', '1h'] as TempLabels[]) {
       expectStripIsSound(m, `${step} today`, { today: true });
     });
 
-    it('other days: the same even strip, and no "Now"', async () => {
+    it('other days: the same even strip, and no dot', async () => {
       for (const width of [480, 1000]) {
         await app.resize(width, 900);
         await page.evaluate(`document.querySelectorAll('.forecast .day')[2].click()`);
@@ -183,7 +197,7 @@ for (const step of ['3h', '2h', '1h'] as TempLabels[]) {
   });
 }
 
-describe('"Now" at the edges of the day (Tokyo clock moved to 00:10, 12:30 and 23:50), every hour shown', () => {
+describe('the dot at the edges of the day (Tokyo clock moved to 00:10, 12:30 and 23:50), every hour shown', () => {
   beforeAll(async () => {
     app = await launchApp({ lastPlace: tokyo, favorites: [tokyo], recent: [tokyo], settings: { units: 'metric', tempLabels: '1h' } });
     page = app.page;
@@ -214,21 +228,39 @@ describe('"Now" at the edges of the day (Tokyo clock moved to 00:10, 12:30 and 2
       await app.resize(width, 900);
       await setTokyoTime(hh, mm);
       const m = await measure();
-      const label = await page.evaluate<string>(`document.getElementById('clock-time').textContent`);
-      expect(label).toBeTruthy();
       expectStripIsSound(m, `${hh}:${mm}`, { today: true });
+      expectDotAtTime(m, hh, mm, `${hh}:${mm} @${width}px`);
+      // And its accessible name reads that time (12-hour).
+      const h12 = hh % 12 === 0 ? 12 : hh % 12;
+      const expected = `Current time: ${h12}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`;
+      expect(await page.evaluate<string>(`document.getElementById('now-dot').getAttribute('aria-label')`)).toMatch(new RegExp(`^Current time: ${h12}:\\d{2} ${hh < 12 ? 'AM' : 'PM'}$`));
+      expect(expected).toMatch(/^Current time: /);
     });
   }
 
-  it('the label follows the dot when the minute ticks (12:30 then 12:59)', async () => {
+  it('the dot moves with the minute while the hour labels stay put', async () => {
     await app.resize(1000, 900);
     await setTokyoTime(12, 30);
     const a = await measure();
     await setTokyoTime(12, 59);
     const b = await measure();
-    expect(b.nowX! - a.nowX!).toBeGreaterThan(5); // the dot moved
-    expect(Math.abs(b.now!.cx - b.nowX!)).toBeLessThanOrEqual(1); // and the label moved with it
-    expect(b.shown.map((s) => s.cx)).toEqual(a.shown.map((s) => s.cx)); // while the hour labels stayed put
+    expect(b.dot.cx - a.dot.cx).toBeGreaterThan(5); // the dot moved
+    expectDotAtTime(b, 12, 59, '12:59');
+    expect(b.shown.map((x) => x.cx)).toEqual(a.shown.map((x) => x.cx)); // the labels did not
+  });
+
+  it('the accessible name follows the format setting (12-hour and 24-hour)', async () => {
+    await app.resize(1000, 900);
+    await setTokyoTime(16, 37);
+    const label = () => page.evaluate<string>(`document.getElementById('now-dot').getAttribute('aria-label')`);
+    expect(await label()).toMatch(/^Current time: 4:3[78] PM$/);
+    await page.evaluate(`document.querySelector('#settings-sections button[data-value="24h"]').click()`);
+    await page.waitFor(`/^Current time: \\d{2}:\\d{2}$/.test(document.getElementById('now-dot').getAttribute('aria-label'))`, 3000);
+    await setTokyoTime(16, 37);
+    expect(await label()).toMatch(/^Current time: 16:3[78]$/);
+    expect(await page.evaluate<string>(`document.getElementById('now-dot').title`)).toBe(await label());
+    await page.evaluate(`document.querySelector('#settings-sections button[data-value="12h"]').click()`);
+    await page.waitFor(`/(AM|PM)$/.test(document.getElementById('now-dot').getAttribute('aria-label'))`, 3000);
   });
 
   it('threw no page exceptions', () => {
