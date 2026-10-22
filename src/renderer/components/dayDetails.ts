@@ -1,15 +1,20 @@
 // The Rain and Temperature cards for the selected day (today by default).
 
 import { rainHoursForDay, rainSummary } from '../../shared/rain';
+import { effectiveStep, labelHours, labelIndices } from '../../shared/labelStep';
 import { passedInfo, type NowMarker } from '../../shared/passed';
 import { formatHour, shortDate, weekday } from '../../shared/time';
-import type { TimeFormat, WeatherData } from '../../shared/types';
+import type { TempLabels, TimeFormat, WeatherData } from '../../shared/types';
 import { describeWeather } from '../../shared/weatherCodes';
-import { renderRainChart, renderTempChart, type TempPoint } from '../charts';
+import { renderRainChart, renderTempChart, type TempLayout, type TempPoint } from '../charts';
 import { $, esc, round } from '../dom';
 import { glyphs, weatherIcon } from '../icons';
 
-const STRIP_EVERY = 3; // hours between items in the hourly strip
+// Sizes of the hourly strip's items. Both are set inline, so the code below knows
+// each item's exact width and can centre it on its x without measuring.
+const HOUR_W = 34;
+const NOW_W = 36;
+const HOUR_GAP = 3; // least space between two neighbouring hour labels
 
 /** "Tomorrow, Oct 18" / "Monday, Oct 19". */
 export function dayName(w: WeatherData, day: string): string {
@@ -47,25 +52,32 @@ function table(id: string, caption: string, head: string[], rows: string[][]): v
 }
 
 /**
- * Place each strip item under its point on the chart's x axis, kept inside the
- * card. On a narrow chart, items that would touch the previous one are hidden.
+ * Place the hourly strip from the chart's own x positions: each label is centred
+ * on its hour's x, and the "Now" label on the dot's x. Nothing is clamped or
+ * moved to dodge a neighbour. If the chosen step is too tight for the width, the
+ * whole strip moves to the next step (hourly, 2, 3, 6, 12), so the labels that
+ * stay are always every n-th hour and equally spaced. "Now" has its own row, so
+ * it never collides with an hour label.
  */
-function positionStrip(strip: HTMLElement, xs: number[]): void {
-  const width = strip.clientWidth;
-  let lastRight = -Infinity;
+function positionStrip(strip: HTMLElement, { xs, nowX }: TempLayout, requested: number): void {
+  const spacing = xs.length > 1 ? (xs[xs.length - 1]! - xs[0]!) / (xs.length - 1) : 0;
+  const step = effectiveStep(requested, spacing, HOUR_W, HOUR_GAP);
+  const shown = new Set(labelIndices(xs.length, step));
+  strip.dataset.step = String(step); // for tests
+  strip.dataset.requestedStep = String(requested);
   strip.querySelectorAll<HTMLElement>('.hour').forEach((el) => {
-    const x = xs[Number(el.dataset.index)];
-    if (x === undefined) return;
-    const w = el.offsetWidth;
-    const left = Math.min(Math.max(x - w / 2, 0), Math.max(0, width - w));
-    const fits = left >= lastRight + 6;
-    el.style.visibility = fits ? 'visible' : 'hidden';
-    el.style.left = `${left}px`;
-    if (fits) lastRight = left + w;
+    const i = Number(el.dataset.index);
+    el.hidden = !shown.has(i);
+    el.style.left = `${xs[i]! - HOUR_W / 2}px`;
   });
+  const now = strip.querySelector<HTMLElement>('.now-label');
+  if (now) {
+    now.style.visibility = nowX === null ? 'hidden' : 'visible';
+    if (nowX !== null) now.style.left = `${nowX - NOW_W / 2}px`;
+  }
 }
 
-export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, format: TimeFormat): void {
+export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, format: TimeFormat, labels: TempLabels): void {
   const hour = (t: string) => formatHour(t, false, format);
   const isToday = day === nowLocal.slice(0, 10);
   const name = isToday ? 'today' : dayName(w, day);
@@ -99,21 +111,20 @@ export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, 
   }
 
   const strip = $('#temp-strip');
-  strip.innerHTML = points
-    .map((p, i) => ({ p, i }))
-    // Today's strip has an item for the current hour; items right next to it make room.
-    .filter(({ i }) => (now ? i === now.index || (i % STRIP_EVERY === 0 && Math.abs(i - now.index) > 2) : i % STRIP_EVERY === 0))
-    .map(({ p, i }) => {
-      const info = describeWeather(p.weatherCode);
-      return `<div class="hour" data-index="${i}" title="${esc(info.label)}">
-          <span class="hour-time">${now && i === now.index ? 'Now' : hour(p.time)}</span>
+  strip.innerHTML = `<div class="now-row"><span class="now-label" style="width:${NOW_W}px">Now</span></div>
+    <div class="hours">${points
+      .map((p, i) => {
+        const info = describeWeather(p.weatherCode);
+        return `<div class="hour" data-index="${i}" style="width:${HOUR_W}px" title="${esc(info.label)}">
+          <span class="hour-time">${hour(p.time)}</span>
           ${weatherIcon(info.icon, p.isDay, 'wx-icon hour-icon')}
           <span class="hour-temp">${round(p.temperature)}°</span>
         </div>`;
-    })
-    .join('');
+      })
+      .join('')}</div>`;
 
-  renderTempChart($<HTMLCanvasElement>('#temp-chart'), points, unit, now, format, (xs) => positionStrip(strip, xs));
+  const requested = labelHours(labels);
+  renderTempChart($<HTMLCanvasElement>('#temp-chart'), points, unit, now, format, (layout) => positionStrip(strip, layout, requested));
   table(
     'temp-data',
     `Hourly temperature, ${name}`,

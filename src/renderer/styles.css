@@ -385,13 +385,24 @@ a:hover { text-decoration: underline; }
 .swatch { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid var(--temp); }
 .swatch-feels { border-top: 2px dashed var(--feels); }
 
-/* Hourly strip under the temperature chart; items are placed under their x position by JS. */
-.hour-strip { position: relative; min-height: 70px; margin-top: 6px; }
+/* Hourly strip under the temperature chart. JS places every item by the chart's own x
+   positions (see positionStrip), and sets each item's width inline. "Now" has a row to
+   itself above the hours, so it can sit exactly under the dot without touching a label. */
+.hour-strip { margin-top: 4px; }
+.now-row { position: relative; height: 20px; }
+.now-label {
+  position: absolute; top: 0; text-align: center; box-sizing: border-box;
+  font-size: 11px; font-weight: 700; line-height: 18px; color: var(--temp);
+  border-radius: 9px; background: rgba(255, 181, 71, 0.16);
+  visibility: hidden; /* shown by JS on today's chart */
+}
+.hours { position: relative; height: 66px; }
 .hour {
-  position: absolute; top: 0; width: 46px;
+  position: absolute; top: 0;
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   font-size: 11.5px;
 }
+.hour[hidden] { display: none; }
 .hour-time { color: var(--muted); white-space: nowrap; }
 .hour-icon { width: 28px; height: 28px; }
 .hour-temp { font-weight: 600; font-size: 13px; }
@@ -572,6 +583,7 @@ a:hover { text-decoration: underline; }
 .settings-sections > * { max-width: 720px; margin-inline: auto; }
 .settings-section + .settings-section { margin-top: 20px; }
 .settings-section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; margin: 0 0 8px; }
+.settings-section-description { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
 .settings-section-body { border-radius: 14px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--stroke); }
 .settings-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 12px 16px; }
 .settings-row + .settings-row { border-top: 1px solid var(--divider); }

@@ -240,10 +240,10 @@ describe('favorites, recent and settings', () => {
   it('saves time format and wind unit, and an old state still loads with defaults', async () => {
     const app = makeApp();
     const defaults = await request(app).get('/api/settings').expect(200);
-    expect(defaults.body).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh' });
+    expect(defaults.body).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' });
 
-    const res = await request(app).patch('/api/settings').send({ timeFormat: '24h', windUnit: 'mph' }).expect(200);
-    expect(res.body).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'mph' });
+    const res = await request(app).patch('/api/settings').send({ timeFormat: '24h', windUnit: 'mph', tempLabels: '2h' }).expect(200);
+    expect(res.body).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'mph', tempLabels: '2h' });
     expect((await request(makeApp()).get('/api/settings').expect(200)).body).toEqual(res.body);
   });
 
@@ -251,7 +251,10 @@ describe('favorites, recent and settings', () => {
     const app = makeApp();
     await request(app).patch('/api/settings').send({ timeFormat: '36h' }).expect(400);
     await request(app).patch('/api/settings').send({ windUnit: 'knots' }).expect(400);
+    await request(app).patch('/api/settings').send({ tempLabels: '4h' }).expect(400);
+    await request(app).patch('/api/settings').send({ tempLabels: 1 }).expect(400);
     expect((await request(app).get('/api/settings')).body.timeFormat).toBe('12h');
+    expect((await request(app).get('/api/settings')).body.tempLabels).toBe('3h');
   });
 
   it('validates bodies', async () => {

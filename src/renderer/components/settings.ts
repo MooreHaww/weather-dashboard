@@ -2,12 +2,15 @@
 // the whole window, frosting the dashboard behind it. Add sections to
 // SETTINGS_SECTIONS below (see "Settings panel" in the README).
 
-import { WIND_LABELS, type Settings, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
+import { formatTime } from '../../shared/time';
+import { WIND_LABELS, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
 
 export interface SettingsSection {
   /** Unique id, used for the section's DOM id ("settings-<id>"). */
   id: string;
   title: string;
+  /** An optional short line under the title, saying what the section does. */
+  description?: string;
   /** Fill the section body, typically with settingsRow(...) elements. */
   render(body: HTMLElement): void;
 }
@@ -18,6 +21,9 @@ export interface SettingsBindings {
   setUnits(units: Units): void;
   setWindUnit(windUnit: WindUnit): void;
   setTimeFormat(timeFormat: TimeFormat): void;
+  setTempLabels(tempLabels: TempLabels): void;
+  /** The selected city's current local time ("YYYY-MM-DDTHH:mm:ss"), used for the time-format examples. */
+  now(): string;
 }
 
 let bindings: SettingsBindings | null = null;
@@ -30,7 +36,8 @@ export function syncSettingsControls(): void {
 
 /** A row of mutually exclusive buttons (radio-group semantics), styled as a pill group. */
 export function segmentedControl<T extends string>(opts: {
-  options: { value: T; label: string }[];
+  /** A label can be a function, so it can show something live (like the current time). */
+  options: { value: T; label: string | (() => string) }[];
   current: () => T;
   onChange: (value: T) => void;
 }): HTMLElement {
@@ -42,13 +49,15 @@ export function segmentedControl<T extends string>(opts: {
     b.type = 'button';
     b.setAttribute('role', 'radio');
     b.dataset.value = value;
-    b.textContent = label;
+    b.textContent = typeof label === 'function' ? label() : label;
     b.addEventListener('click', () => opts.onChange(value));
     return b;
   });
   const sync = () => {
     const current = opts.current();
-    buttons.forEach((b) => {
+    buttons.forEach((b, i) => {
+      const label = opts.options[i]!.label;
+      if (typeof label === 'function') b.textContent = label();
       const on = b.dataset.value === current;
       b.setAttribute('aria-checked', String(on));
       b.setAttribute('aria-pressed', String(on)); // drives the pressed styling
@@ -92,18 +101,40 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'time-format',
     title: 'Time format',
+    description: 'Applies to the live clock, the hourly times and charts, sunrise and sunset, and the rain summary.',
     render(body) {
+      const example = (format: TimeFormat) => formatTime(bindings!.now(), format, { minutes: true });
       body.append(
         settingsRow({
-          label: 'Clock',
-          description: 'Used for the live clock, hourly charts, sunrise and sunset.',
+          label: 'Show times as',
           control: segmentedControl<TimeFormat>({
             options: [
-              { value: '12h', label: '12-hour (AM/PM)' },
-              { value: '24h', label: '24-hour' },
+              { value: '12h', label: () => `12-hour (${example('12h')})` },
+              { value: '24h', label: () => `24-hour (${example('24h')})` },
             ],
             current: () => bindings!.get().timeFormat,
             onChange: (v) => bindings!.setTimeFormat(v),
+          }),
+        }),
+      );
+    },
+  },
+  {
+    id: 'temperature-chart',
+    title: 'Temperature chart',
+    render(body) {
+      body.append(
+        settingsRow({
+          label: 'Time labels',
+          description: 'How often the strip under the chart shows a time, icon and temperature. Narrow windows show fewer.',
+          control: segmentedControl<TempLabels>({
+            options: [
+              { value: '3h', label: 'Every 3 hours' },
+              { value: '2h', label: 'Every 2 hours' },
+              { value: '1h', label: 'Every hour' },
+            ],
+            current: () => bindings!.get().tempLabels,
+            onChange: (v) => bindings!.setTempLabels(v),
           }),
         }),
       );
@@ -164,7 +195,16 @@ export function settingsSection(section: SettingsSection): HTMLElement {
   const body = document.createElement('div');
   body.className = 'settings-section-body';
   section.render(body);
-  el.append(heading, body);
+  el.append(heading);
+  if (section.description) {
+    const desc = document.createElement('p');
+    desc.className = 'settings-section-description';
+    desc.id = `settings-${section.id}-description`;
+    desc.textContent = section.description;
+    el.setAttribute('aria-describedby', desc.id);
+    el.append(desc);
+  }
+  el.append(body);
   return el;
 }
 

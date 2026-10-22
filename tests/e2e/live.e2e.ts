@@ -87,7 +87,7 @@ const geometry = () =>
     const c = document.getElementById('temp-chart');
     const cr = c.getBoundingClientRect();
     const items = [...document.querySelectorAll('#temp-strip .hour')]
-      .filter((e) => e.style.visibility !== 'hidden')
+      .filter((e) => !e.hidden)
       .map((e) => { const r = e.getBoundingClientRect(); return { i: Number(e.dataset.index), x: r.left + r.width / 2 - cr.left }; });
     return { nowX: c.dataset.nowX === undefined ? null : Number(c.dataset.nowX), nowY: c.dataset.nowY === undefined ? null : Number(c.dataset.nowY), dpr: devicePixelRatio, cssWidth: cr.width, items };
   })()`);
@@ -128,11 +128,11 @@ describe('temperature chart covers the whole day', () => {
     expect(await text('#temp-summary')).toMatch(/^High -?\d+° at \d{1,2} (AM|PM) · Low -?\d+° at \d{1,2} (AM|PM)$/);
   });
 
-  it('the hourly strip covers the day and marks the current hour "Now"', async () => {
-    const strip = await page.evaluate<string[]>(`[...document.querySelectorAll('#temp-strip .hour-time')].map((e) => e.textContent)`);
-    expect(strip.filter((s) => s === 'Now')).toHaveLength(1);
-    expect(strip.length).toBeGreaterThanOrEqual(7); // every 3rd hour, minus those next to "Now", plus "Now"
-    expect(strip.every((s) => s === 'Now' || /^\d{1,2} (AM|PM)$/.test(s))).toBe(true);
+  it('the hourly strip shows every 3rd hour of the day, and "Now" has its own label', async () => {
+    const strip = await page.evaluate<string[]>(`[...document.querySelectorAll('#temp-strip .hour:not([hidden]) .hour-time')].map((e) => e.textContent)`);
+    expect(strip).toEqual(['12 AM', '3 AM', '6 AM', '9 AM', '12 PM', '3 PM', '6 PM', '9 PM']); // none dropped around "now"
+    expect(await page.evaluate<string>(`getComputedStyle(document.querySelector('#temp-strip .now-label')).visibility`)).toBe('visible');
+    expect(await text('#temp-strip .now-label')).toBe('Now');
   });
 
   it('draws the dot at the city\'s current time (Tokyo, whatever the PC clock says)', async () => {

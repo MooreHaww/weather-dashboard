@@ -1,5 +1,5 @@
 import { localIsoIn } from '../shared/time';
-import type { AppState, CacheStatus, Place, TimeFormat, Units, WeatherData, WindUnit } from '../shared/types';
+import type { AppState, CacheStatus, Place, TempLabels, TimeFormat, Units, WeatherData, WindUnit } from '../shared/types';
 import { describeWeather } from '../shared/weatherCodes';
 import { api } from './api';
 import { moveTempNow } from './charts';
@@ -27,7 +27,7 @@ const REFRESH_MS = 5 * 60_000;
 const CARD_CONCURRENCY = 4;
 
 const app = {
-  state: { favorites: [], recent: [], settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh' }, lastPlace: null } as AppState,
+  state: { favorites: [], recent: [], settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' }, lastPlace: null } as AppState,
   place: null as Place | null,
   weather: null as WeatherData | null,
   cache: 'MISS' as CacheStatus,
@@ -81,7 +81,7 @@ function render(): void {
 
   const day = currentDay(w, nowLocal);
   renderForecast($('#forecast'), w, nowLocal.slice(0, 10), day);
-  renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat);
+  renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat, app.state.settings.tempLabels);
   renderUnits();
   renderUpdated();
   renderCards();
@@ -95,7 +95,7 @@ function chooseDay(day: string): void {
   app.drawnHour = nowLocal.slice(0, 13);
   app.day = day === nowLocal.slice(0, 10) ? null : day;
   selectDay(day);
-  renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat);
+  renderDayDetails(w, day, nowLocal, app.state.settings.timeFormat, app.state.settings.tempLabels);
 }
 
 function renderCards(): void {
@@ -187,6 +187,7 @@ async function autoRefresh(): Promise<boolean> {
 function tickNow(): void {
   const w = app.weather;
   if (!w) return;
+  syncSettingsControls(); // the time-format examples show the current time
   const nowLocal = localIsoIn(w.timezone);
   if (nowLocal.slice(0, 13) !== app.drawnHour) {
     render();
@@ -257,6 +258,15 @@ async function setWindUnit(windUnit: WindUnit): Promise<void> {
   if (app.place) await selectPlace(app.place, false);
 }
 
+/** The strip is rebuilt from the weather we already have, so no reload is needed. */
+function setTempLabels(tempLabels: TempLabels): void {
+  if (tempLabels === app.state.settings.tempLabels) return;
+  app.state.settings.tempLabels = tempLabels;
+  syncSettingsControls();
+  api.saveSettings({ tempLabels }).catch(() => {});
+  render();
+}
+
 /** Times are formatted from the weather we already have, so no reload is needed. */
 function setTimeFormat(timeFormat: TimeFormat): void {
   if (timeFormat === app.state.settings.timeFormat) return;
@@ -291,6 +301,8 @@ async function boot(): Promise<void> {
     setUnits: (u) => void setUnits(u),
     setWindUnit: (u) => void setWindUnit(u),
     setTimeFormat,
+    setTempLabels,
+    now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
   });
   $('#refresh').addEventListener('click', () => void refresh());
 

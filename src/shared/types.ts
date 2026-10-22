@@ -3,9 +3,12 @@
 export type Units = 'metric' | 'imperial';
 export type TimeFormat = '12h' | '24h';
 export type WindUnit = 'kmh' | 'mph' | 'ms';
+/** How often the temperature chart's hourly strip shows a time: every 3 hours, every 2 hours or every hour. */
+export type TempLabels = '3h' | '2h' | '1h';
 
 export const TIME_FORMATS: readonly TimeFormat[] = ['12h', '24h'];
 export const WIND_UNITS: readonly WindUnit[] = ['kmh', 'mph', 'ms'];
+export const TEMP_LABELS: readonly TempLabels[] = ['3h', '2h', '1h'];
 export const WIND_LABELS: Record<WindUnit, string> = { kmh: 'km/h', mph: 'mph', ms: 'm/s' };
 
 /** A city returned by geocoding, also used for favorites and recent searches. */
@@ -87,6 +90,7 @@ export interface Settings {
   units: Units;
   timeFormat: TimeFormat;
   windUnit: WindUnit;
+  tempLabels: TempLabels;
 }
 
 export interface AppState {

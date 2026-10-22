@@ -58,8 +58,19 @@ export interface TempPoint {
   feelsLike: number;
 }
 
-/** x pixel of each data point, relative to the canvas, after every layout. */
-export type LayoutListener = (xs: number[]) => void;
+/**
+ * After every layout: the x pixel of each data point, and of "now" (null on other
+ * days), relative to the canvas. "Now" comes from the same scale the dot is drawn
+ * with, so anything placed from these numbers lines up with the dot exactly.
+ */
+export interface TempLayout {
+  xs: number[];
+  nowX: number | null;
+}
+export type LayoutListener = (layout: TempLayout) => void;
+
+/** Room the plot leaves at its edges so the hourly strip's labels fit under the first and last points. */
+export const TEMP_CHART_PADDING = { left: 6, right: 22 };
 
 let tempChart: Chart<'line'> | null = null;
 let rainChart: Chart<'bar'> | null = null;
@@ -78,7 +89,10 @@ const reportLayout: Plugin<'line'> = {
     const x = chart.scales.x;
     if (!x || !onTempLayout) return;
     const n = chart.data.labels?.length ?? 0;
-    onTempLayout(Array.from({ length: n }, (_, i) => x.getPixelForValue(i)));
+    onTempLayout({
+      xs: Array.from({ length: n }, (_, i) => x.getPixelForValue(i)),
+      nowX: nowPos === null ? null : x.getPixelForValue(nowPos),
+    });
   },
 };
 
@@ -170,7 +184,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Move the "now" dot and the colour split without rebuilding the chart (the minute tick). */
 export function moveTempNow(now: NowMarker | null): void {
-  nowPos = now ? now.pos : null;
+  nowPos = now ? Math.min(now.pos, (tempChart?.data.labels?.length ?? 1) - 1) : null;
   tempChart?.update('none');
 }
 
@@ -183,7 +197,8 @@ export function renderTempChart(
   onLayout: LayoutListener,
 ): void {
   onTempLayout = onLayout;
-  nowPos = now ? now.pos : null;
+  // The line ends at the last point (11 PM), so during the final hour the dot rests there.
+  nowPos = now ? Math.min(now.pos, points.length - 1) : null;
   const labels = points.map((p, i) => (now && i === now.index ? 'Now' : formatHour(p.time, false, format)));
   canvas.dataset.labels = JSON.stringify(labels); // for tests; the canvas itself is not readable
   const temps = points.map((p) => round1(p.temperature));
@@ -264,6 +279,7 @@ export function renderTempChart(
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      layout: { padding: TEMP_CHART_PADDING },
       plugins: {
         legend: { display: false },
         // The grey copies only repaint the passed part; the tooltip lists each series once.

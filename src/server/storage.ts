@@ -4,7 +4,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { TIME_FORMATS, WIND_UNITS, type AppState, type Place, type Settings } from '../shared/types';
+import { TEMP_LABELS, TIME_FORMATS, WIND_UNITS, type AppState, type Place, type Settings } from '../shared/types';
 
 export const MAX_RECENT = 10;
 export const MAX_FAVORITES = 50;
@@ -15,7 +15,7 @@ interface StoredFile extends AppState {
 }
 
 export function defaultSettings(): Settings {
-  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh' };
+  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' };
 }
 
 export function defaultState(): AppState {
@@ -29,6 +29,7 @@ export function validSettings(raw: unknown): Partial<Settings> {
   if (o.units === 'metric' || o.units === 'imperial') out.units = o.units;
   if (TIME_FORMATS.includes(o.timeFormat as never)) out.timeFormat = o.timeFormat as Settings['timeFormat'];
   if (WIND_UNITS.includes(o.windUnit as never)) out.windUnit = o.windUnit as Settings['windUnit'];
+  if (TEMP_LABELS.includes(o.tempLabels as never)) out.tempLabels = o.tempLabels as Settings['tempLabels'];
   return out;
 }
 

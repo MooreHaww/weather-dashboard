@@ -34,7 +34,7 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **City search** with keyboard shortcuts (`Ctrl+K` or `/`).
 - **Favorites and recent cities**, shown as cards with live weather.
 - **Settings panel (v1.2):** a full-window liquid-glass panel with temperature (°C/°F) and wind-speed units (km/h, mph, m/s) and a 12-hour or 24-hour clock that updates everywhere at once.
-- **Live data and chart (v1.3):** refreshes itself every 5 minutes with no flicker, and the temperature chart covers the whole day (12 AM to 11 PM in the city's own time): hours that have passed are grey, the rest is coloured, and a dot marks the current time.
+- **Live data and chart (v1.3):** refreshes itself every 5 minutes with no flicker, and the temperature chart covers the whole day (12 AM to 11 PM in the city's own time): hours that have passed are grey, the rest is coloured, and a dot marks the current time with a "Now" label right under it. The hourly strip is evenly spaced and can show every 3 hours, every 2 hours or every hour.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -77,8 +77,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (112 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (74 tests, needs internet) |
+| `npm test` | Unit and API tests (128 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (111 tests, needs internet) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -102,9 +102,10 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 | Section | Options |
 |---|---|
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
-| **Time format** | 12-hour (AM/PM) or 24-hour, used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
+| **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
+| **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
 
-Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -182,8 +183,12 @@ Electron main process
 ### v1.3 - Live data and chart
 - [x] Refresh / update every 5m by itself
 - [x] Make the temperature box cover all 24h of the day; the time that has passed has no colours in it, plus a dot to show the time we are in
+- [x] Choose how detailed the temperature box times are: every 3 hours, every 2 hours, or every hour
+- [x] Clear 12-hour / 24-hour choice with examples
 
 #### v1.3 (Fixes)
+- [x] Hourly labels evenly spaced, no empty gaps
+- [x] "Now" label sits exactly under the dot
 
 ### v1.4 - Auto-update
 - [ ] Auto-update through GitHub Releases

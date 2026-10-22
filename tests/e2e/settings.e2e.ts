@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchApp, temperaturePainted, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
+import { localIsoIn } from '../../src/shared/time';
 
 const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69171, country: 'Japan', countryCode: 'JP' };
 
@@ -62,7 +63,7 @@ const statText = (label: string) =>
   );
 const chartLabels = (id: string) => page.evaluate<string[]>(`JSON.parse(document.getElementById(${JSON.stringify(id)}).dataset.labels)`);
 const stripTimes = () =>
-  page.evaluate<string[]>(`[...document.querySelectorAll('#temp-strip .hour-time')].map((e) => e.textContent)`);
+  page.evaluate<string[]>(`[...document.querySelectorAll('#temp-strip .hour:not([hidden]) .hour-time')].map((e) => e.textContent)`);
 
 beforeAll(async () => {
   app = await launchApp({ lastPlace: tokyo, favorites: [tokyo], recent: [tokyo], settings: { units: 'metric' } });
@@ -96,8 +97,9 @@ describe('settings panel', () => {
     expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Units',
       'Time format',
+      'Temperature chart',
     ]);
-    expect(await checkedOptions()).toEqual(['metric', 'kmh', '12h']);
+    expect(await checkedOptions()).toEqual(['metric', 'kmh', '12h', '3h']);
   });
 
   it('is a full-window liquid-glass layer that blurs the app behind it', async () => {
@@ -290,7 +292,7 @@ describe('settings panel', () => {
     expect(await checkedOptions()).toContain('24h');
     const strip = await stripTimes();
     expect(strip.length).toBeGreaterThan(0);
-    expect(strip.every((x) => /^(Now|\d{2}:00)$/.test(x))).toBe(true);
+    expect(strip.every((x) => /^\d{2}:00$/.test(x))).toBe(true);
     const rain = await chartLabels('rain-chart');
     expect(rain.length).toBeGreaterThan(0);
     expect(rain.every((l) => /^\d{2}:00$/.test(l))).toBe(true);
@@ -325,10 +327,88 @@ describe('settings panel', () => {
     await waitClosed();
   });
 
+  it('Time format: its own section, with examples from the current time and a line saying where it applies', async () => {
+    const info = await page.evaluate<{ title: string; desc: string; labels: string[]; values: string[] }>(`(() => {
+      const s = document.getElementById('settings-time-format');
+      const b = [...s.querySelectorAll('button')];
+      return { title: s.querySelector('h3').textContent, desc: s.querySelector('.settings-section-description').textContent, labels: b.map((x) => x.textContent), values: b.map((x) => x.dataset.value) };
+    })()`);
+    expect(info.title).toBe('Time format');
+    expect(info.desc).toMatch(/clock.*hourly.*sunrise and sunset/i);
+    expect(info.values).toEqual(['12h', '24h']);
+    const tokyoNow = localIsoIn('Asia/Tokyo');
+    const m24 = info.labels[1]!.match(/^24-hour \((\d{2}):(\d{2})\)$/);
+    const m12 = info.labels[0]!.match(/^12-hour \((\d{1,2}):(\d{2}) (AM|PM)\)$/);
+    expect(m24).not.toBeNull();
+    expect(m12).not.toBeNull();
+    // The example is Tokyo's current time (the selected city), to within a couple of minutes.
+    const shown = Number(m24![1]) * 60 + Number(m24![2]);
+    const actual = Number(tokyoNow.slice(11, 13)) * 60 + Number(tokyoNow.slice(14, 16));
+    expect(Math.min(Math.abs(shown - actual), 1440 - Math.abs(shown - actual))).toBeLessThanOrEqual(2);
+    const h12 = Number(m12![1]) % 12 + (m12![3] === 'PM' ? 12 : 0);
+    expect(h12).toBe(Number(m24![1]));
+  });
+
+  it('Temperature chart: "Time labels" applies instantly, and thins out when the window is narrow', async () => {
+    await app.resize(1360, 900);
+    await page.evaluate(`window.__sameDocument = true`);
+    const strip = () =>
+      page.evaluate<{ requested: string; step: string; shown: number[] }>(`(() => {
+        const s = document.getElementById('temp-strip');
+        return { requested: s.dataset.requestedStep, step: s.dataset.step, shown: [...s.querySelectorAll('.hour:not([hidden])')].map((e) => Number(e.dataset.index)) };
+      })()`);
+    const everyNth = (shown: number[], n: number) => shown.every((v, k) => v === k * n) && shown.length === Math.ceil(24 / n);
+
+    await openPanel();
+    expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-temperature-chart button')].map((b) => b.textContent)`)).toEqual([
+      'Every 3 hours',
+      'Every 2 hours',
+      'Every hour',
+    ]);
+    expect(await checkedOptions()).toContain('3h'); // the default
+    let s = await strip();
+    expect([s.requested, s.step]).toEqual(['3', '3']);
+    expect(everyNth(s.shown, 3)).toBe(true);
+
+    await chooseOption('2h');
+    await page.waitFor(`document.getElementById('temp-strip').dataset.requestedStep === '2'`, 2000);
+    s = await strip();
+    expect(Number(s.step)).toBeGreaterThanOrEqual(2);
+    expect(everyNth(s.shown, Number(s.step))).toBe(true);
+
+    await chooseOption('1h');
+    await page.waitFor(`document.getElementById('temp-strip').dataset.requestedStep === '1'`, 2000);
+    s = await strip();
+    expect(everyNth(s.shown, Number(s.step))).toBe(true);
+    const wideStep = Number(s.step);
+    const stripWidth = () => page.evaluate<number>(`document.getElementById('temp-strip').getBoundingClientRect().width`);
+    const wideWidth = await stripWidth();
+
+    // At 1000 px the two charts sit side by side and the temperature card is at its narrowest:
+    // the labels thin to a coarser step, still every n-th hour. Wide again: back to what fits.
+    await page.press('Escape');
+    await waitClosed();
+    await app.resize(1000, 900);
+    await page.waitFor(`Number(document.getElementById('temp-strip').dataset.step) > ${wideStep}`, 3000);
+    s = await strip();
+    expect(await stripWidth()).toBeLessThan(wideWidth);
+    expect(s.requested).toBe('1');
+    expect(everyNth(s.shown, Number(s.step))).toBe(true);
+    await app.resize(1360, 900);
+    await page.waitFor(`Number(document.getElementById('temp-strip').dataset.step) === ${wideStep}`, 3000);
+    expect(await page.evaluate<boolean>(`window.__sameDocument === true`)).toBe(true); // never reloaded
+    await openPanel();
+    await chooseOption('3h');
+    await page.waitFor(`document.getElementById('temp-strip').dataset.step === '3'`, 2000);
+    await page.press('Escape');
+    await waitClosed();
+  });
+
   it('settings persist after a restart', async () => {
     await openPanel();
     await chooseOption('24h');
     await chooseOption('ms');
+    await chooseOption('2h');
     await page.press('Escape');
     await waitClosed();
 
@@ -336,7 +416,7 @@ describe('settings panel', () => {
     const file = path.join(app.dataDir, 'weather-dashboard.json');
     const saved = async () => {
       const s = JSON.parse(await readFile(file, 'utf8')).settings;
-      return s.timeFormat === '24h' && s.windUnit === 'ms';
+      return s.timeFormat === '24h' && s.windUnit === 'ms' && s.tempLabels === '2h';
     };
     for (let i = 0; i < 40 && !(await saved().catch(() => false)); i++) await new Promise((r) => setTimeout(r, 100));
     expect(await saved()).toBe(true);
@@ -351,7 +431,8 @@ describe('settings panel', () => {
     await page.waitFor(`/^\\d{2}:\\d{2}:\\d{2}$/.test(document.getElementById('clock-time').textContent)`, 5000);
     await page.waitFor(windUnitIs('m/s'), 15_000);
     await openPanel();
-    expect(await checkedOptions()).toEqual(expect.arrayContaining(['24h', 'ms']));
+    expect(await checkedOptions()).toEqual(expect.arrayContaining(['24h', 'ms', '2h']));
+    expect(await page.evaluate<string>(`document.getElementById('temp-strip').dataset.requestedStep`)).toBe('2');
     await page.press('Escape');
     await waitClosed();
   });

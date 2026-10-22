@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { HttpError } from '../errors';
-import { TIME_FORMATS, WIND_UNITS } from '../../shared/types';
+import { TEMP_LABELS, TIME_FORMATS, WIND_UNITS } from '../../shared/types';
 import { toPlace, type Storage } from '../storage';
 
 function placeFromBody(body: unknown) {
@@ -63,6 +63,7 @@ export function stateRoutes(storage: Storage): Router {
     oneOf('units', ['metric', 'imperial']);
     oneOf('timeFormat', TIME_FORMATS);
     oneOf('windUnit', WIND_UNITS);
+    oneOf('tempLabels', TEMP_LABELS);
     res.json((await storage.updateSettings(body)).settings);
   });
 

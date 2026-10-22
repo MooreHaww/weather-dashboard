@@ -23,11 +23,29 @@ function toggle(): HTMLInputElement {
 }
 
 describe('settings helpers', () => {
-  it('ships the Units and Time format sections, and nothing else yet', () => {
+  it('ships the Units, Time format and Temperature chart sections, and nothing else yet', () => {
     expect(SETTINGS_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['units', 'Units'],
       ['time-format', 'Time format'],
+      ['temperature-chart', 'Temperature chart'],
     ]);
+  });
+
+  it('settingsSection shows an optional description under the title and links it to the section', () => {
+    const el = settingsSection({ id: 'x', title: 'X', description: 'What this does.', render: () => {} });
+    const children = [...el.children].map((c) => c.className || c.tagName);
+    expect(children).toEqual(['settings-section-title', 'settings-section-description', 'settings-section-body']);
+    expect(el.querySelector('.settings-section-description')!.textContent).toBe('What this does.');
+    expect(el.getAttribute('aria-describedby')).toBe(el.querySelector('.settings-section-description')!.id);
+  });
+
+  it('segmentedControl labels can be functions and are refreshed on sync', () => {
+    let n = 1;
+    const group = segmentedControl({ options: [{ value: 'a', label: () => `Now ${n}` }], current: () => 'a', onChange: () => {} });
+    expect(group.querySelector('button')!.textContent).toBe('Now 1');
+    n = 2;
+    syncSettingsControls();
+    expect(group.querySelector('button')!.textContent).toBe('Now 2');
   });
 
   it('settingsRow links its label and description to the control', () => {
@@ -71,6 +89,7 @@ describe('settings helpers', () => {
     expect(el.querySelector('h3')!.textContent).toBe('Display');
     expect(el.getAttribute('aria-labelledby')).toBe(el.querySelector('h3')!.id);
     expect(el.querySelectorAll('.settings-section-body .settings-row')).toHaveLength(1);
+    expect(el.querySelector('.settings-section-description')).toBeNull();
 
     const container = document.createElement('div');
     renderSettingsSections(container, [section, { ...section, id: 'other', title: 'Other' }]);
@@ -79,12 +98,15 @@ describe('settings helpers', () => {
 });
 
 describe('the real sections', () => {
-  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh' };
+  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' };
+  let nowLocal = '2026-10-17T16:05:30';
   const bindings: SettingsBindings = {
     get: () => settings,
     setUnits: vi.fn((u) => void (settings.units = u)),
     setWindUnit: vi.fn((u) => void (settings.windUnit = u)),
     setTimeFormat: vi.fn((f) => void (settings.timeFormat = f)),
+    setTempLabels: vi.fn((l) => void (settings.tempLabels = l)),
+    now: () => nowLocal,
   };
 
   function mount(): HTMLElement {
@@ -100,16 +122,43 @@ describe('the real sections', () => {
 
   it('renders radio groups with the current values checked', () => {
     const root = mount();
-    expect([...root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Units', 'Time format']);
-    expect(root.querySelectorAll('[role="radiogroup"]')).toHaveLength(3);
+    expect([...root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Units', 'Time format', 'Temperature chart']);
+    expect(root.querySelectorAll('[role="radiogroup"]')).toHaveLength(4);
     expect(checked(root, 0)).toEqual(['°C']);
     expect(checked(root, 1)).toEqual(['km/h']);
-    expect(checked(root, 2)).toEqual(['12-hour (AM/PM)']);
+    expect(checked(root, 2)).toEqual(['12-hour (4:05 PM)']);
+    expect(checked(root, 3)).toEqual(['Every 3 hours']);
     expect([...root.querySelectorAll('[role="radiogroup"]')[1]!.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
       'km/h',
       'mph',
       'm/s',
     ]);
+  });
+
+  it('labels the time formats with examples from the current time, and says where they apply', () => {
+    const root = mount();
+    const labels = () => [...root.querySelectorAll('[role="radiogroup"]')[2]!.querySelectorAll('button')].map((b) => b.textContent);
+    expect(labels()).toEqual(['12-hour (4:05 PM)', '24-hour (16:05)']);
+    expect(root.querySelector('#settings-time-format .settings-section-description')!.textContent).toMatch(/clock.*hourly.*sunrise and sunset/i);
+    nowLocal = '2026-10-17T00:09:00';
+    syncSettingsControls();
+    expect(labels()).toEqual(['12-hour (12:09 AM)', '24-hour (00:09)']);
+    nowLocal = '2026-10-17T16:05:30';
+  });
+
+  it('offers every 3 hours, every 2 hours and every hour, and calls the setter', () => {
+    const root = mount();
+    const group = root.querySelectorAll('[role="radiogroup"]')[3]!;
+    expect([...group.querySelectorAll('button')].map((b) => [b.dataset.value, b.textContent])).toEqual([
+      ['3h', 'Every 3 hours'],
+      ['2h', 'Every 2 hours'],
+      ['1h', 'Every hour'],
+    ]);
+    [...group.querySelectorAll('button')].find((b) => b.dataset.value === '1h')!.click();
+    expect(bindings.setTempLabels).toHaveBeenCalledWith('1h');
+    syncSettingsControls();
+    expect(checked(root, 3)).toEqual(['Every hour']);
+    settings.tempLabels = '3h';
   });
 
   it('calls the matching setter on click and follows outside changes', () => {
@@ -118,7 +167,7 @@ describe('the real sections', () => {
       [...root.querySelectorAll('[role="radiogroup"]')[group]!.querySelectorAll('button')].find((b) => b.textContent === text)!;
 
     button(1, 'm/s').click();
-    button(2, '24-hour').click();
+    button(2, '24-hour (16:05)').click();
     expect(bindings.setWindUnit).toHaveBeenCalledWith('ms');
     expect(bindings.setTimeFormat).toHaveBeenCalledWith('24h');
 
@@ -127,6 +176,6 @@ describe('the real sections', () => {
     syncSettingsControls();
     expect(checked(root, 0)).toEqual(['°F']);
     expect(checked(root, 1)).toEqual(['m/s']);
-    expect(checked(root, 2)).toEqual(['24-hour']);
+    expect(checked(root, 2)).toEqual(['24-hour (16:05)']);
   });
 });
