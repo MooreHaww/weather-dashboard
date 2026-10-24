@@ -9,6 +9,7 @@ import { renderHero, tickClock } from './components/hero';
 import { setupSearch } from './components/search';
 import { setupSettings, syncSettingsControls } from './components/settings';
 import { renderSidebar, setupSidebar, type CardWeather } from './components/sidebar';
+import { setupUpdateNote } from './components/updateNote';
 import { $, esc, round } from './dom';
 import { glyphs } from './icons';
 import { createRefresher } from './refresh';
@@ -307,6 +308,7 @@ async function boot(): Promise<void> {
     now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
   });
   $('#refresh').addEventListener('click', () => void refresh());
+  setupUpdateNote();
 
   document.addEventListener('keydown', (e) => {
     const typing = (e.target as HTMLElement).matches('input, textarea');

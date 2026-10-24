@@ -1,7 +1,7 @@
 {
   "name": "weather-dashboard",
   "productName": "Weather Dashboard",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "A dark, modern desktop weather app powered by Open-Meteo.",
   "author": "Mohammad (Moore) Hawwari",
   "license": "MIT",
@@ -11,6 +11,7 @@
     "node": ">=22"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "express": "^5.3.0"
   },
   "devDependencies": {
@@ -47,7 +48,9 @@
     "bench": "tsx scripts/bench.ts",
     "screenshot": "npm run build && tsx scripts/screenshot.ts",
     "icon": "electron scripts/make-icon.cjs",
-    "dist": "npm run build && electron-builder --win --x64",
+    "dist": "npm run build && electron-builder --win --x64 --publish never && npm run release-files",
+    "release-files": "tsx scripts/release-files.ts",
+    "test:update": "npm run dist && vitest run --config vitest.packaged.config.mts",
     "lint": "eslint . && tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json && tsc -p tsconfig.test.json"
   }
 }

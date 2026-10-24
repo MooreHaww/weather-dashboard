@@ -107,6 +107,8 @@ export interface LaunchedApp {
   /** Resize the window's content area (like the user dragging its edges). */
   resize: (width: number, height: number) => Promise<void>;
   maximize: () => Promise<void>;
+  /** Run an async function body in the Electron main process (Node inspector), e.g. to point the updater at a test feed. */
+  evaluateMain: <T>(body: string) => Promise<T>;
   restore: () => Promise<void>;
   /** Quit the app. `keepData` leaves the data folder so a second launchApp({ dataDir }) can reopen it. */
   close: (opts?: { keepData?: boolean }) => Promise<void>;
@@ -138,7 +140,15 @@ const KEYS = {
 };
 const SHIFT = 8; // CDP modifier bit
 
-export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): Promise<LaunchedApp> {
+export interface LaunchOptions {
+  dataDir?: string;
+  /** Run this executable (e.g. the packaged release/win-unpacked app) instead of `electron .`. */
+  executable?: string;
+  /** Extra environment variables for the app. */
+  env?: Record<string, string>;
+}
+
+export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<LaunchedApp> {
   const dataDir = opts.dataDir ?? (await mkdtemp(path.join(tmpdir(), 'wd-e2e-')));
   if (seed) {
     await writeFile(path.join(dataDir, 'weather-dashboard.json'), JSON.stringify({ version: 1, ...seed }), 'utf8');
@@ -146,7 +156,7 @@ export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): P
 
   const port = await freePort();
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const electronPath = require('electron') as unknown as string;
+  const electronPath = opts.executable ?? (require('electron') as unknown as string);
   const child = spawn(
     electronPath,
     [
@@ -154,11 +164,11 @@ export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): P
       `--remote-debugging-port=${port}`,
       // Own profile folder, so a running installed copy's single-instance lock doesn't apply.
       `--user-data-dir=${path.join(dataDir, 'profile')}`,
-      root,
+      ...(opts.executable ? [] : [root]),
     ],
     {
       cwd: root,
-      env: { ...process.env, WD_DATA_DIR: dataDir, VITE_DEV_URL: '' },
+      env: { ...process.env, ...opts.env, WD_DATA_DIR: dataDir, VITE_DEV_URL: '' },
       stdio: ['ignore', 'ignore', 'pipe'],
     },
   );
@@ -260,6 +270,7 @@ export async function launchApp(seed?: Seed, opts: { dataDir?: string } = {}): P
       await inMain(`if (win.isMaximized()) win.unmaximize(); win.setContentSize(${width}, ${height});`);
       await settle();
     },
+    evaluateMain: (body) => main.evaluate(`(async () => { ${body} })()`),
     async maximize() {
       await inMain(`win.maximize();`);
       await settle();

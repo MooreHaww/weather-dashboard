@@ -556,6 +556,23 @@ a:hover { text-decoration: underline; }
    was and the Windows window buttons (drawn over the right --controls) stay
    visible. */
 
+/* ---------- update note (bottom right, below the settings panel) ---------- */
+
+.update-note {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  max-width: min(360px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 10px 10px 14px; border-radius: 12px;
+  background: rgba(30, 42, 70, 0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--stroke-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-size: 13px; color: var(--text);
+}
+.update-note[hidden] { display: none; }
+.update-note .icon-button { width: 28px; height: 28px; }
+.update-note .icon-button .glyph { width: 15px; height: 15px; }
+
 .settings { position: fixed; inset: 0; z-index: 100; overflow: hidden; }
 .settings[hidden] { display: none; }
 

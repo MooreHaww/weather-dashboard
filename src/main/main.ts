@@ -7,11 +7,13 @@ import type { Server } from 'node:http';
 import path from 'node:path';
 import { createApp } from '../server/app';
 import { createLogger } from '../server/logger';
+import { startAutoUpdate, type Updater } from './autoUpdate';
 
 const devUrl = process.env.VITE_DEV_URL || undefined; // set by `npm run dev`; empty counts as unset
 const log = createLogger(process.env.LOG_LEVEL);
 let server: Server | null = null;
 let win: BrowserWindow | null = null;
+let updateReady: string | null = null; // downloaded version, installs when the app quits
 
 function dataDir(): string {
   if (process.env.WD_DATA_DIR) return process.env.WD_DATA_DIR; // tests and screenshots
@@ -54,6 +56,7 @@ function createWindow(url: string): void {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      preload: path.join(__dirname, 'preload.js'), // only relays "update ready"
     },
   });
 
@@ -66,9 +69,15 @@ function createWindow(url: string): void {
     return { action: 'deny' };
   });
 
+  win.webContents.on('did-finish-load', sendUpdateReady);
   win.once('ready-to-show', () => win?.show());
   win.on('closed', () => (win = null));
   void win.loadURL(devUrl ?? url);
+}
+
+/** Tell the page an update is ready (again after a reload, so it is never lost). */
+function sendUpdateReady(): void {
+  if (updateReady && win && !win.webContents.isLoading()) win.webContents.send('update-ready', updateReady);
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -89,7 +98,20 @@ if (!app.requestSingleInstanceLock()) {
     } catch (err) {
       log('error', `Failed to start: ${(err as Error).stack}`);
       app.quit();
+      return;
     }
+    // Updates come from GitHub Releases (see electron-builder.yml `publish`), only in the installed app.
+    startAutoUpdate({
+      enabled: app.isPackaged && !devUrl,
+      // Loaded on the first check, not at startup. `autoUpdater` is a getter on the CommonJS
+      // exports, so a dynamic import only has it on `.default`.
+      loadUpdater: async () => (await import('electron-updater')).default.autoUpdater as unknown as Updater,
+      onReady: (version) => {
+        updateReady = version;
+        sendUpdateReady();
+      },
+      log,
+    });
   });
 
   app.on('window-all-closed', () => app.quit());

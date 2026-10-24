@@ -1,4 +1,6 @@
-# Builds a Windows installer: release/Weather Dashboard Setup <version>.exe
+# Builds a Windows installer plus the auto-update files, all in release/:
+#   Weather-Dashboard-Setup-<version>.exe, its .blockmap, and latest.yml
+# Nothing is published from here (`--publish never`); releases are uploaded by hand.
 appId: com.mhawwari.weatherdashboard
 productName: Weather Dashboard
 copyright: Copyright © 2026 Mohammad (Moore) Hawwari
@@ -22,7 +24,10 @@ win:
     - target: nsis
       arch: [x64]
   icon: build/icon.ico
-  artifactName: '${productName} Setup ${version}.${ext}'
+  # No spaces: GitHub renames uploaded files with spaces, and latest.yml must name the real file.
+  artifactName: 'Weather-Dashboard-Setup-${version}.${ext}'
+  # The installer is unsigned, so there is no publisher to check. Turn this back on if it is ever signed.
+  verifyUpdateCodeSignature: false
 
 nsis:
   oneClick: false
@@ -36,3 +41,10 @@ nsis:
   uninstallerIcon: build/icon.ico
   # Keep favorites/settings in %APPDATA% when uninstalling (the user can delete them).
   deleteAppDataOnUninstall: false
+
+# Where the installed app looks for updates (written into resources/app-update.yml).
+# Public repo: the app needs no token.
+publish:
+  provider: github
+  owner: MooreHaww
+  repo: weather-dashboard
