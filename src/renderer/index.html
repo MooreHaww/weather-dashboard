@@ -50,7 +50,7 @@
         <section>
           <h2 class="section-title">
             Recent
-            <button type="button" id="clear-recent" class="link-button" hidden>Clear</button>
+            <button type="button" id="clear-recent" class="link-button" aria-label="Clear recent cities" title="Clear recent cities" hidden>Clear</button>
           </h2>
           <ul id="recent" class="fav-list"></ul>
           <p id="recent-empty" class="muted small">Cities you search for show up here.</p>
@@ -98,6 +98,7 @@
 
         <footer class="footer">
           <span class="updated"><span id="updated-text"></span>
+            <span id="offline-note" class="offline-note" hidden>Weather service unreachable, showing saved data</span>
             <button type="button" class="button refresh" id="refresh">
               <span class="refresh-icon" id="refresh-icon"></span><span>Refresh</span>
             </button>

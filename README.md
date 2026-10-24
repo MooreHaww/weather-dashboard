@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.4.0-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.4.5-orange?style=for-the-badge)
 
 | ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -79,8 +79,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (147 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (117 tests, needs internet) |
+| `npm test` | Unit and API tests (159 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (132 tests, needs internet) |
 | `npm run test:update` | Builds the installer, then checks auto-update in the packaged app against a local test feed (4 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
@@ -197,6 +197,19 @@ Electron main process
 - [x] Auto-update through GitHub Releases
 
 #### v1.4 (Fixes)
+
+### v1.4.5
+- [x] Full code review, fixes only for proven problems
+- [x] Version shown in Settings
+- [x] Remember window size and position
+- [x] Offline note
+- [x] F5 / Ctrl+R refresh
+- [x] Clear recent button
+
+#### v1.4.5 (Fixes)
+- [x] City name no longer shown over another city's weather after a failed load
+- [x] Screen readers no longer read the clock every second
+- [x] Keyboard focus no longer lost after clearing recent cities
 
 ### v1.5 - Location
 - [ ] Auto-detect my location on first launch

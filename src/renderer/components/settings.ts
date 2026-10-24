@@ -26,6 +26,9 @@ export interface SettingsBindings {
   now(): string;
 }
 
+/** The app version from package.json, set at build time (vite.config.mts `define`). */
+declare const __APP_VERSION__: string;
+
 let bindings: SettingsBindings | null = null;
 const syncers = new Set<() => void>();
 
@@ -228,7 +231,14 @@ export function setupSettings(b: SettingsBindings): { open: () => void; close: (
     (el): el is HTMLElement => el !== null,
   );
 
-  renderSettingsSections(document.getElementById('settings-sections')!);
+  const sections = document.getElementById('settings-sections')!;
+  renderSettingsSections(sections);
+  // The app version, last in the panel (it scrolls with the sections).
+  const version = document.createElement('p');
+  version.id = 'settings-version';
+  version.className = 'settings-version';
+  version.textContent = `Version ${__APP_VERSION__}`;
+  sections.append(version);
   syncSettingsControls();
 
   let open = false;

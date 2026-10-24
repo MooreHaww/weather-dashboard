@@ -1,13 +1,14 @@
 // Electron entry point: start the embedded Express server on localhost, then
 // open a hardened window that loads the dashboard from it.
 
-import { app, BrowserWindow, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, Menu, screen, session, shell } from 'electron';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import path from 'node:path';
 import { createApp } from '../server/app';
 import { createLogger } from '../server/logger';
 import { startAutoUpdate, type Updater } from './autoUpdate';
+import { loadWindowState, restoreBounds, saveWindowState } from './windowState';
 
 const devUrl = process.env.VITE_DEV_URL || undefined; // set by `npm run dev`; empty counts as unset
 const log = createLogger(process.env.LOG_LEVEL);
@@ -41,9 +42,14 @@ function startServer(): Promise<string> {
 
 function createWindow(url: string): void {
   const origin = new URL(url).origin;
+  // Last size and position (window-state.json), checked against the screens there are now.
+  const stateFile = path.join(dataDir(), 'window-state.json');
+  const bounds = restoreBounds(loadWindowState(stateFile), screen.getAllDisplays().map((d) => d.workArea));
   win = new BrowserWindow({
-    width: 1360,
-    height: 900,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     minWidth: 480,
     minHeight: 400,
     show: false,
@@ -70,7 +76,13 @@ function createWindow(url: string): void {
   });
 
   win.webContents.on('did-finish-load', sendUpdateReady);
-  win.once('ready-to-show', () => win?.show());
+  win.once('ready-to-show', () => {
+    if (bounds.maximized) win?.maximize();
+    win?.show();
+  });
+  win.on('close', () => {
+    if (win) saveWindowState(stateFile, { ...win.getNormalBounds(), maximized: win.isMaximized() });
+  });
   win.on('closed', () => (win = null));
   void win.loadURL(devUrl ?? url);
 }

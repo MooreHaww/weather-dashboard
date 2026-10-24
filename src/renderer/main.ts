@@ -1,7 +1,7 @@
 import { localIsoIn } from '../shared/time';
 import type { AppState, CacheStatus, Place, TempLabels, TimeFormat, Units, WeatherData, WindUnit } from '../shared/types';
 import { describeWeather } from '../shared/weatherCodes';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { moveTempNow } from './charts';
 import { nowMarker, renderDayDetails, updateNowDot } from './components/dayDetails';
 import { renderForecast, selectDay, setupForecast } from './components/forecast';
@@ -29,8 +29,11 @@ const CARD_CONCURRENCY = 4;
 
 const app = {
   state: { favorites: [], recent: [], settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' }, lastPlace: null } as AppState,
+  /** The city being shown or loaded (Retry and the auto-refresh load this one). */
   place: null as Place | null,
   weather: null as WeatherData | null,
+  /** The city `weather` belongs to. Differs from `place` after a city failed to load. */
+  shown: null as Place | null,
   cache: 'MISS' as CacheStatus,
   /** Selected forecast day ("YYYY-MM-DD"); null means today. */
   day: null as string | null,
@@ -68,7 +71,7 @@ function currentDay(w: WeatherData, nowLocal: string): string {
 }
 
 function render(): void {
-  const { place, weather: w } = app;
+  const { shown: place, weather: w } = app;
   if (!place || !w) return;
   const nowLocal = localIsoIn(w.timezone);
   app.drawnHour = nowLocal.slice(0, 13);
@@ -100,11 +103,16 @@ function chooseDay(day: string): void {
 }
 
 function renderCards(): void {
-  renderSidebar(app.state.favorites, app.state.recent, app.place?.id ?? null, app.cards);
+  renderSidebar(app.state.favorites, app.state.recent, app.shown?.id ?? null, app.cards);
 }
 
 function renderUnits(): void {
   syncSettingsControls();
+}
+
+/** The offline note next to "Updated ... ago": the data on screen is saved data. */
+function showOffline(on: boolean): void {
+  $('#offline-note').hidden = !on;
 }
 
 function renderUpdated(): void {
@@ -137,15 +145,22 @@ async function selectPlace(place: Place, record = true, opts: { fresh?: boolean;
   try {
     const res = await api.weather(place, app.state.settings.units, app.state.settings.windUnit, fresh);
     if (req !== app.request) return false; // a newer selection won
-    if (silent && res.meta.cache === 'STALE') return false; // upstream is down: keep what we show
+    if (silent && res.meta.cache === 'STALE') {
+      if (app.shown?.id === place.id) showOffline(true); // upstream is down: keep what we show, and say so
+      return false;
+    }
     app.weather = res.data;
+    app.shown = place;
     app.cache = res.meta.cache;
     showBanner(res.meta.cache === 'STALE' ? 'Showing saved data: the weather service is unreachable right now.' : null);
+    showOffline(res.meta.cache === 'STALE');
     render();
     ok = true;
     refresher.markFresh();
   } catch (err) {
     if (req !== app.request) return false;
+    // Open-Meteo unreachable (the server's 502) while refreshing the city on screen: what we show is saved data.
+    if (err instanceof ApiError && err.status === 502 && app.shown?.id === place.id) showOffline(true);
     if (!silent) showBanner((err as Error).message, true);
   } finally {
     if (req === app.request && !silent) {
@@ -200,7 +215,7 @@ function tickNow(): void {
 }
 
 async function toggleFavorite(): Promise<void> {
-  const place = app.place;
+  const place = app.shown; // the star belongs to the city on screen
   if (!place) return;
   try {
     app.state.favorites = isFavorite(place) ? await api.removeFavorite(place.id) : await api.addFavorite(place);
@@ -293,6 +308,8 @@ async function boot(): Promise<void> {
     onClearRecent: async () => {
       app.state.recent = await api.clearRecent();
       renderCards();
+      // The button hides itself; give keyboard focus a useful place instead of the page.
+      if (document.activeElement === document.body) search.focus();
     },
   });
 
@@ -311,6 +328,12 @@ async function boot(): Promise<void> {
   setupUpdateNote();
 
   document.addEventListener('keydown', (e) => {
+    // F5 / Ctrl+R refresh the current city. The app has no menu, so they never reload the page.
+    if (e.key === 'F5' || (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'r')) {
+      e.preventDefault();
+      if (!main.classList.contains('is-loading')) void refresh();
+      return;
+    }
     const typing = (e.target as HTMLElement).matches('input, textarea');
     if ((e.ctrlKey && e.key.toLowerCase() === 'k') || (e.key === '/' && !typing)) {
       e.preventDefault();

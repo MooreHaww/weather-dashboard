@@ -161,6 +161,15 @@ describe('the real sections', () => {
     settings.tempLabels = '3h';
   });
 
+  it('ends with the app version from package.json', async () => {
+    const root = mount();
+    const { readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const { version } = JSON.parse(await readFile(join(__dirname, '..', 'package.json'), 'utf8')) as { version: string };
+    expect(root.lastElementChild!.id).toBe('settings-version');
+    expect(root.lastElementChild!.textContent).toBe(`Version ${version}`);
+  });
+
   it('calls the matching setter on click and follows outside changes', () => {
     const root = mount();
     const button = (group: number, text: string) =>

@@ -1,10 +1,15 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
+
+// The app version (the same package.json Electron's app.getVersion() reads), shown in Settings.
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 // The renderer lives in src/renderer and is built into dist/renderer,
 // which the Express server serves inside the packaged app.
 export default defineConfig({
   root: 'src/renderer',
   base: '/',
+  define: { __APP_VERSION__: JSON.stringify(version) },
   build: {
     outDir: '../../dist/renderer',
     emptyOutDir: true,

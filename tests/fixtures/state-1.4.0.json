@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "favorites": [
+    {
+      "id": 1850147,
+      "name": "Tokyo",
+      "latitude": 35.6895,
+      "longitude": 139.69171,
+      "admin1": "Tokyo",
+      "country": "Japan",
+      "countryCode": "JP",
+      "timezone": "Asia/Tokyo"
+    }
+  ],
+  "recent": [
+    {
+      "id": 2643743,
+      "name": "London",
+      "latitude": 51.50853,
+      "longitude": -0.12574,
+      "admin1": "England",
+      "country": "United Kingdom",
+      "countryCode": "GB",
+      "timezone": "Europe/London"
+    }
+  ],
+  "settings": {
+    "units": "imperial",
+    "timeFormat": "24h",
+    "windUnit": "ms",
+    "tempLabels": "1h"
+  },
+  "lastPlace": {
+    "id": 2643743,
+    "name": "London",
+    "latitude": 51.50853,
+    "longitude": -0.12574,
+    "admin1": "England",
+    "country": "United Kingdom",
+    "countryCode": "GB",
+    "timezone": "Europe/London"
+  }
+}

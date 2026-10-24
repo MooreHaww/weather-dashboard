@@ -19,7 +19,10 @@ function stat(icon: string, label: string, value: string, sub = ''): string {
     </div>`;
 }
 
-/** Current conditions card. The clock spans are filled by tickClock() every second. */
+/**
+ * Current conditions card. The clock spans are filled by tickClock() every second, so
+ * the clock opts out of the card's polite live region (or screen readers would say the time every second).
+ */
 export function renderHero(
   el: HTMLElement,
   place: Place,
@@ -42,7 +45,7 @@ export function renderHero(
           title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${glyphs.star}</button>
       </div>
       <p class="muted">${esc(placeSubtitle(place)) || '&nbsp;'}</p>
-      <div class="clock">
+      <div class="clock" aria-live="off">
         <div class="clock-time" id="clock-time"></div>
         <div class="clock-date"><span id="clock-date"></span></div>
         <div class="clock-tz muted small">Local time · <span id="clock-offset"></span> · ${esc(w.timezone)}</div>

@@ -87,8 +87,8 @@ export interface AppPage {
   evaluate<T>(expression: string): Promise<T>;
   /** Poll until the expression is truthy. */
   waitFor(expression: string, timeoutMs?: number): Promise<void>;
-  /** Send a real key press to the focused element (optionally with Shift held). */
-  press(key: keyof typeof KEYS, opts?: { shift?: boolean }): Promise<void>;
+  /** Send a real key press to the focused element (optionally with Shift or Ctrl held). */
+  press(key: keyof typeof KEYS, opts?: { shift?: boolean; ctrl?: boolean }): Promise<void>;
   /** A real left mouse click at a viewport position (goes through hit-testing like a user's click). */
   click(x: number, y: number): Promise<void>;
   /** Emulate Windows' "Animation effects: off" (prefers-reduced-motion: reduce). */
@@ -137,8 +137,12 @@ const KEYS = {
   ' ': { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' },
   Tab: { key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 },
   Escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
+  F5: { key: 'F5', code: 'F5', windowsVirtualKeyCode: 116 },
+  r: { key: 'r', code: 'KeyR', windowsVirtualKeyCode: 82 },
+  k: { key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75 },
 };
-const SHIFT = 8; // CDP modifier bit
+const SHIFT = 8; // CDP modifier bits
+const CTRL = 2;
 
 export interface LaunchOptions {
   dataDir?: string;
@@ -230,7 +234,7 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
     },
     async press(key, opts) {
       const k = KEYS[key];
-      const modifiers = opts?.shift ? SHIFT : 0;
+      const modifiers = (opts?.shift ? SHIFT : 0) | (opts?.ctrl ? CTRL : 0);
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', modifiers, ...k });
       await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', modifiers, ...k, text: undefined });
     },

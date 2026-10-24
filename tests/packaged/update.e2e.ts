@@ -149,6 +149,10 @@ describe('auto-update in the packaged app', () => {
     expect(await page.evaluate<boolean>(noteVisible)).toBe(false);
     expect(await page.evaluate<boolean>(`document.getElementById('banner').hidden`)).toBe(true);
     expect(await page.evaluate<number>(`document.querySelectorAll('.forecast .day').length`)).toBe(7);
+    // The version in Settings is the installed app's own version.
+    const appVersion = await app!.evaluateMain<string>(`return process.mainModule.require('electron').app.getVersion();`);
+    expect(appVersion).toBe(version);
+    expect(await page.evaluate<string>(`document.getElementById('settings-version').textContent`)).toBe(`Version ${appVersion}`);
     expect(errors).toEqual([]);
   });
 });
