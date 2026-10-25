@@ -253,40 +253,29 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - [x] Auto-update through GitHub Releases
 
 #### v1.4 (Fixes)
-
-##### v1.4.5
-- [x] Full code review, fixes only for proven problems
-- [x] Version shown in Settings
-- [x] Remember window size and position
-- [x] Offline note
-- [x] F5 / Ctrl+R refresh
-- [x] Clear recent button
-
-###### v1.4.5 (Fixes)
-- [x] City name no longer shown over another city's weather after a failed load
-- [x] Screen readers no longer read the clock every second
-- [x] Keyboard focus no longer lost after clearing recent cities
-
-##### v1.4.6
-- [x] Red dot on the settings gear when an update is ready
-- [x] Update now button in Settings: asks to confirm, then updates and restarts by itself
-
-###### v1.4.6 (Fixes)
-- [x] Removed the box around the gear icon
-
-##### v1.4.7
-- [x] Settings shows the version and whether it is up to date
-- [x] Update available shows in Settings with a button to restart
-- [x] "Up to date" shows when the last check happened
-- [x] Link to the Open-Meteo license next to the credit in the footer
-
-###### v1.4.7 (Fixes)
-- [x] Remove favorite and Clear recent show a message when the app cannot save, instead of doing nothing
-- [x] The version in package-lock.json now matches the app (it said 1.3.0)
+- [x] Full code review, fixes only for proven problems (1.4.5)
+- [x] Version shown in Settings (1.4.5)
+- [x] Remember window size and position (1.4.5)
+- [x] Offline note (1.4.5)
+- [x] F5 / Ctrl+R refresh (1.4.5)
+- [x] Clear recent button (1.4.5)
+- [x] City name no longer shown over another city's weather after a failed load (1.4.5)
+- [x] Screen readers no longer read the clock every second (1.4.5)
+- [x] Keyboard focus no longer lost after clearing recent cities (1.4.5)
+- [x] Red dot on the settings gear when an update is ready (1.4.6)
+- [x] Update now button in Settings: asks to confirm, then updates and restarts by itself (1.4.6)
+- [x] Removed the box around the gear icon (1.4.6)
+- [x] Settings shows the version and whether it is up to date (1.4.7)
+- [x] Update available shows in Settings with a button to restart (1.4.7)
+- [x] "Up to date" shows when the last check happened (1.4.7)
+- [x] Link to the Open-Meteo license next to the credit in the footer (1.4.7)
+- [x] Remove favorite and Clear recent show a message when the app cannot save, instead of doing nothing (1.4.7)
+- [x] The version in package-lock.json now matches the app (it said 1.3.0) (1.4.7)
 
 ### v1.5 - Location
 - [ ] Auto-detect my location on first launch
 - [ ] Add (your location) and it stays on top
+- [ ] A button in Settings to check for updates
 
 #### v1.5 (Fixes)
 
