@@ -9,6 +9,7 @@ import { createApp } from '../server/app';
 import { createLogger } from '../server/logger';
 import { startAutoUpdate, type Updater } from './autoUpdate';
 import { createRestartHandler, RESTART_CHANNEL } from './updateRestart';
+import { createUpdateTracker, type UpdateTracker } from './updateTracker';
 import { loadWindowState, restoreBounds, saveWindowState } from './windowState';
 
 const devUrl = process.env.VITE_DEV_URL || undefined; // set by `npm run dev`; empty counts as unset
@@ -16,6 +17,7 @@ const log = createLogger(process.env.LOG_LEVEL);
 let server: Server | null = null;
 let win: BrowserWindow | null = null;
 let updateReady: string | null = null; // downloaded version, installs when the app quits
+let tracker: UpdateTracker | null = null; // what Settings > Updates shows
 
 function dataDir(): string {
   if (process.env.WD_DATA_DIR) return process.env.WD_DATA_DIR; // tests and screenshots
@@ -82,7 +84,10 @@ function createWindow(url: string): void {
     return { action: 'deny' };
   });
 
-  win.webContents.on('did-finish-load', sendUpdateReady);
+  win.webContents.on('did-finish-load', () => {
+    sendUpdateState();
+    sendUpdateReady();
+  });
   win.once('ready-to-show', () => {
     if (bounds.maximized) win?.maximize();
     win?.show();
@@ -97,6 +102,11 @@ function sendUpdateReady(): void {
   if (updateReady && win && !win.webContents.isLoading()) win.webContents.send('update-ready', updateReady);
 }
 
+/** Tell the page the update state for Settings (the page only displays it; also sent again after a reload). */
+function sendUpdateState(): void {
+  if (tracker && win && !win.webContents.isLoading()) win.webContents.send('update-state', tracker.state());
+}
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -108,6 +118,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
+    // Updates come from GitHub Releases (see electron-builder.yml `publish`), only in the installed app.
+    const updatesEnabled = app.isPackaged && !devUrl;
+    const updateTracker = createUpdateTracker({ version: app.getVersion(), enabled: updatesEnabled, onChange: sendUpdateState });
+    tracker = updateTracker;
     // The dashboard needs no camera, location, notifications, etc.
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
     let url: string;
@@ -119,14 +133,14 @@ if (!app.requestSingleInstanceLock()) {
       app.quit();
       return;
     }
-    // Updates come from GitHub Releases (see electron-builder.yml `publish`), only in the installed app.
     const updates = startAutoUpdate({
-      enabled: app.isPackaged && !devUrl,
+      enabled: updatesEnabled,
+      tracker: updateTracker,
       // Loaded on the first check, not at startup. `autoUpdater` is a getter on the CommonJS
       // exports, so a dynamic import only has it on `.default`.
       loadUpdater: async () => (await import('electron-updater')).default.autoUpdater as unknown as Updater,
       onReady: (version) => {
-        updateReady = version;
+        updateReady = version; // the tracker has already told the page the new state
         sendUpdateReady();
       },
       log,

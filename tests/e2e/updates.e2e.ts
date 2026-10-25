@@ -1,9 +1,10 @@
 // v1.4.6 in the real window: the gear without its box (hover, focus ring, title bar at
 // every width), and the "update ready" signals with the "Restart now?" confirmation.
 // This build is not packaged, so its updater never runs: the test sends the page the
-// same "update-ready" message the main process sends after a download. The main process
-// itself has no downloaded update here, so it must ignore "Restart". The real download
-// and restart path is tested in the packaged app (tests/packaged/update.e2e.ts).
+// same "update-state" and "update-ready" messages the main process sends after a download.
+// The main process itself has no downloaded update here, so it must ignore "Restart". The
+// real check, download and restart path (and the Updates section in each state) is tested
+// in the packaged app (tests/packaged/update.e2e.ts).
 // Run with: npm run test:e2e
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -103,22 +104,26 @@ describe('the gear in the title bar', () => {
 });
 
 describe('before an update is ready', () => {
-  it('there is no dot, no note and no Update row', async () => {
+  it('there is no dot, no note and no Update button; the Updates section shows just the version (the updater does not run here)', async () => {
     expect(await page.evaluate<number>(`document.querySelectorAll('.update-dot').length`)).toBe(0);
     expect(await page.evaluate<string>(`document.getElementById('settings-button').getAttribute('aria-label')`)).toBe('Settings');
     expect(await page.evaluate<boolean>(`document.getElementById('update-note').hidden`)).toBe(true);
     await openSettings();
     expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
+      'Updates',
       'Units',
       'Time format',
       'Temperature chart',
     ]);
+    const appVersion = await app.evaluateMain<string>(`return process.mainModule.require('electron').app.getVersion();`);
+    expect(await page.evaluate<string>(`document.querySelector('#settings-updates .settings-row-label').textContent`)).toBe(`Version ${appVersion}`);
+    expect(await page.evaluate<number>(`document.querySelectorAll('#settings-updates .settings-row-description').length`)).toBe(0);
     expect(await page.evaluate<boolean>(`document.getElementById('update-now') === null`)).toBe(true);
     await closeSettings();
   });
 
   it('the page can only listen and ask for a restart; it has no other way to reach the main process', async () => {
-    expect(await page.evaluate<string[]>(`Object.keys(window.updates).sort()`)).toEqual(['onReady', 'restart']);
+    expect(await page.evaluate<string[]>(`Object.keys(window.updates).sort()`)).toEqual(['onReady', 'onState', 'restart']);
     expect(await page.evaluate<string>(`typeof window.require + ' ' + typeof window.ipcRenderer + ' ' + typeof window.process`)).toBe(
       'undefined undefined undefined',
     );
@@ -150,11 +155,14 @@ describe('the title bar from 480 to 1400 px', () => {
 });
 
 describe('when an update is ready (message simulated, no update in the main process)', () => {
-  it('shows the red dot on the gear, the new note and the Update row at the top of Settings', async () => {
+  it('shows the red dot on the gear, the new note and the Update now button in the Updates section', async () => {
     await app.resize(1000, 700);
-    await app.evaluateMain(
-      `const { BrowserWindow } = process.mainModule.require('electron'); BrowserWindow.getAllWindows()[0].webContents.send('update-ready', '9.9.9');`,
-    );
+    await app.evaluateMain(`
+      const { BrowserWindow, app } = process.mainModule.require('electron');
+      const wc = BrowserWindow.getAllWindows()[0].webContents;
+      wc.send('update-state', { status: 'ready', version: app.getVersion(), next: '9.9.9' });
+      wc.send('update-ready', '9.9.9');
+    `);
     await page.waitFor(`document.querySelector('#settings-button .update-dot') !== null`, 3000);
     const dot = await page.evaluate<Record<string, number | string>>(`(() => {
       const d = document.querySelector('.update-dot').getBoundingClientRect(), g = document.getElementById('settings-button').getBoundingClientRect();
@@ -186,13 +194,13 @@ describe('when an update is ready (message simulated, no update in the main proc
 
     await openSettings();
     expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
-      'Update',
+      'Updates',
       'Units',
       'Time format',
       'Temperature chart',
     ]);
-    expect(await page.evaluate<string>(`document.querySelector('#settings-update .settings-row-label').textContent`)).toBe('Version 9.9.9 is ready');
-    expect(await page.evaluate<string>(`document.getElementById('settings-sections').lastElementChild.id`)).toBe('settings-version');
+    expect(await page.evaluate<string>(`document.querySelector('#settings-updates .settings-row-label').textContent`)).toBe('Version 9.9.9 is ready');
+    expect(await page.evaluate<string>(`document.getElementById('settings-sections').lastElementChild.id`)).toBe('settings-temperature-chart');
   });
 
   it('the title bar still has no overlaps with the dot, at 480 and 1400 px', async () => {

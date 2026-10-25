@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CHECK_INTERVAL_MS, FIRST_CHECK_DELAY_MS, startAutoUpdate, type Updater } from '../src/main/autoUpdate';
+import { createUpdateTracker } from '../src/main/updateTracker';
 
 class FakeUpdater extends EventEmitter {
   autoDownload = false;
@@ -19,8 +20,10 @@ function setup(opts: { enabled?: boolean; loadFails?: number } = {}) {
   });
   const onReady = vi.fn();
   const log = vi.fn();
-  const handle = startAutoUpdate({ enabled: opts.enabled ?? true, loadUpdater, onReady, log });
-  return { updater, loadUpdater, onReady, log, handle };
+  const enabled = opts.enabled ?? true;
+  const tracker = createUpdateTracker({ version: '1.4.7', enabled });
+  const handle = startAutoUpdate({ enabled, loadUpdater, tracker, onReady, log });
+  return { updater, loadUpdater, onReady, log, handle, tracker };
 }
 
 describe('auto-update scheduling', () => {
@@ -123,3 +126,69 @@ describe('auto-update scheduling', () => {
     expect(onReady).toHaveBeenLastCalledWith('1.4.2');
   });
 });
+
+describe('what the Settings "Updates" section is told', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('knows nothing before the first check finishes', async () => {
+    const { tracker } = setup();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS - 1);
+    expect(tracker.state().status).toBe('idle');
+  });
+
+  it('a check that resolves without saying anything does not count as "up to date"', async () => {
+    const { tracker } = setup(); // the fake's checkForUpdates resolves null and emits nothing
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    expect(tracker.state().status).toBe('idle');
+  });
+
+  it('"update-not-available" means up to date', async () => {
+    const { tracker, updater } = setup();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    updater.emit('update-not-available', { version: '1.4.7' });
+    expect(tracker.state()).toMatchObject({ status: 'up-to-date', version: '1.4.7' });
+  });
+
+  it('a newer version goes downloading, then ready', async () => {
+    const { tracker, updater } = setup();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    updater.emit('update-available', { version: '1.4.8' });
+    expect(tracker.state()).toEqual({ status: 'downloading', version: '1.4.7', next: '1.4.8' });
+    updater.emit('update-downloaded', { version: '1.4.8' });
+    expect(tracker.state()).toEqual({ status: 'ready', version: '1.4.7', next: '1.4.8' });
+  });
+
+  it('a rejected check, a failed load and an error event are all "failed"', async () => {
+    const a = setup();
+    a.updater.checkForUpdates.mockRejectedValueOnce(new Error('net::ERR_INTERNET_DISCONNECTED'));
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    expect(a.tracker.state().status).toBe('failed');
+
+    const b = setup({ loadFails: 1 });
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    expect(b.tracker.state().status).toBe('failed');
+
+    const c = setup();
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    c.updater.emit('error', new Error('HttpError: 503'));
+    expect(c.tracker.state().status).toBe('failed');
+  });
+
+  it('the next successful check clears a failure', async () => {
+    const { tracker, updater } = setup();
+    updater.checkForUpdates.mockRejectedValueOnce(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    expect(tracker.state().status).toBe('failed');
+    updater.checkForUpdates.mockImplementationOnce(async () => void updater.emit('update-not-available', {}));
+    await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS);
+    expect(tracker.state().status).toBe('up-to-date');
+  });
+
+  it('a dev or unpackaged build never leaves "unavailable"', async () => {
+    const { tracker } = setup({ enabled: false });
+    await vi.advanceTimersByTimeAsync(CHECK_INTERVAL_MS * 2);
+    expect(tracker.state()).toEqual({ status: 'unavailable', version: '1.4.7' });
+  });
+});
+

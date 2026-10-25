@@ -161,13 +161,17 @@ describe('the real sections', () => {
     settings.tempLabels = '3h';
   });
 
-  it('ends with the app version from package.json', async () => {
+  it('has no version line of its own any more (the version lives in the Updates section)', () => {
     const root = mount();
-    const { readFile } = await import('node:fs/promises');
-    const { join } = await import('node:path');
-    const { version } = JSON.parse(await readFile(join(__dirname, '..', 'package.json'), 'utf8')) as { version: string };
-    expect(root.lastElementChild!.id).toBe('settings-version');
-    expect(root.lastElementChild!.textContent).toBe(`Version ${version}`);
+    expect(root.querySelector('#settings-version')).toBeNull();
+    expect(root.lastElementChild!.id).toBe('settings-temperature-chart');
+  });
+
+  it('a row can be plain information, with no control', () => {
+    const row = settingsRow({ label: 'Version 1.4.7', description: 'Some note' });
+    expect(row.querySelector('.settings-row-control')).toBeNull();
+    expect(row.querySelector('label')!.htmlFor).toBe('');
+    expect(row.querySelector('.settings-row-description')!.textContent).toBe('Some note');
   });
 
   it('calls the matching setter on click and follows outside changes', () => {

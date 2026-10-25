@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.4.6-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.4.7-orange?style=for-the-badge)
 
 | ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -47,7 +47,8 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **Live data and chart (v1.3):** refreshes itself every 5 minutes with no flicker, and the temperature chart covers the whole day (12 AM to 11 PM in the city's own time): hours that have passed are grey, the rest is coloured, and a pulsing dot marks the current time ("Current time" in the legend). The hourly strip is evenly spaced and can show every 3 hours, every 2 hours or every hour.
 - **Auto-update (v1.4):** checks GitHub Releases 10 seconds after start and then every 4 hours, downloads a new version in the background and installs it when you close the app.
 - **Update now (v1.4.6):** when an update is ready, the gear shows a red dot and Settings has an **Update now** button. After you confirm, the app closes, updates and opens again.
-- **v1.4.5:** remembers the window's size, position and maximized state; `F5` or `Ctrl+R` refreshes; Settings shows the app version.
+- **v1.4.5:** remembers the window's size, position and maximized state; `F5` or `Ctrl+R` refreshes.
+- **Updates in Settings (v1.4.7):** the **Updates** section always shows the app version and where updating stands: up to date (and when it was last checked), downloading, or ready with the **Update now** button.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -82,9 +83,9 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (178 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (170 tests, needs internet) |
-| `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (6 tests) |
+| `npm test` | Unit and API tests (218 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (171 tests, needs internet) |
+| `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (7 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -117,14 +118,12 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 
 | Section | Options |
 |---|---|
-| **Update** | Only when an update has been downloaded: "Version X is ready" and **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app |
+| **Updates** | Always first. The installed version and the state: "Version 1.4.7 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date" |
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 | **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
 
-The app version is shown at the bottom of the panel.
-
-Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Update section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top only when an update is ready. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -138,7 +137,7 @@ Electron main process
  │    └─ the built UI
  ├─ the window loads http://127.0.0.1:<port>
  └─ electron-updater checks GitHub Releases (installed app only)
-      └─ preload: "update ready" to the page, "Update now" back (the page's only message)
+      └─ preload: "update ready" and the update state to the page, "Update now" back (the page's only message)
 ```
 
 | Folder | Purpose |
@@ -158,9 +157,9 @@ Electron main process
 
 **How it is tested**
 
-- **Unit and API tests** (Vitest) run offline: cache, storage, time and rain helpers, settings, auto-update scheduling and the "Update now" checks in the main process.
+- **Unit and API tests** (Vitest) run offline: cache, storage, time and rain helpers, settings, auto-update scheduling, the update state shown in Settings and the "Update now" checks in the main process.
 - **End-to-end tests** start the real built app in its own Electron window, with its own profile and a throwaway data folder, and drive it over the Chrome DevTools Protocol with real clicks and key presses. They resize the real window and measure the layout: no overlapping cards, the stat dividers every 50 px from 480 to 1400 px, the hourly strip's spacing, the current-time dot's position. They count the pixels each chart painted and fail on any page error. Animations stay on.
-- **The update test** builds the installer, runs the packaged app and points its updater at a local fake feed (a `latest.yml` and a fake installer). It checks the download, the note, the red dot, "Update now" and the restart path. The fake installer never runs.
+- **The update test** builds the installer, runs the packaged app and points its updater at a local fake feed (a `latest.yml` and a fake installer). It checks the Updates section in each state (before the first check, up to date, downloading, ready, and a feed that returns 503), the download, the note, the red dot, "Update now" and the restart path. The fake installer never runs.
 
 **Releases and auto-update**
 
@@ -194,7 +193,7 @@ Electron main process
 
 ## Data and credits
 
-Weather data by [Open-Meteo.com](https://open-meteo.com/), under [CC BY 4.0](https://open-meteo.com/en/licence). Open-Meteo's licence asks for a link next to wherever its data is shown (the app's footer has one), a link to the licence, and a note if changes were made. Its [terms](https://open-meteo.com/en/terms) allow the free API "only for non-commercial purposes", for example "Private or non-profit websites or apps that do not have subscriptions or advertising", with fewer than 10,000 calls per day, 5,000 per hour and 600 per minute.
+Weather data by [Open-Meteo.com](https://open-meteo.com/), under [CC BY 4.0](https://open-meteo.com/en/licence). Open-Meteo's licence asks for a link next to wherever its data is shown (the app's footer has one), a link to the licence (the footer has that too), and a note if changes were made. Its [terms](https://open-meteo.com/en/terms) allow the free API "only for non-commercial purposes", for example "Private or non-profit websites or apps that do not have subscriptions or advertising", with fewer than 10,000 calls per day, 5,000 per hour and 600 per minute.
 
 Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](https://www.electronjs.org/) (MIT).
 
@@ -255,7 +254,7 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 
 #### v1.4 (Fixes)
 
-### v1.4.5
+##### v1.4.5
 - [x] Full code review, fixes only for proven problems
 - [x] Version shown in Settings
 - [x] Remember window size and position
@@ -263,17 +262,27 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - [x] F5 / Ctrl+R refresh
 - [x] Clear recent button
 
-#### v1.4.5 (Fixes)
+###### v1.4.5 (Fixes)
 - [x] City name no longer shown over another city's weather after a failed load
 - [x] Screen readers no longer read the clock every second
 - [x] Keyboard focus no longer lost after clearing recent cities
 
-### v1.4.6
+##### v1.4.6
 - [x] Red dot on the settings gear when an update is ready
 - [x] Update now button in Settings: asks to confirm, then updates and restarts by itself
 
-#### v1.4.6 (Fixes)
+###### v1.4.6 (Fixes)
 - [x] Removed the box around the gear icon
+
+##### v1.4.7
+- [x] Settings shows the version and whether it is up to date
+- [x] Update available shows in Settings with a button to restart
+- [x] "Up to date" shows when the last check happened
+- [x] Link to the Open-Meteo license next to the credit in the footer
+
+###### v1.4.7 (Fixes)
+- [x] Remove favorite and Clear recent show a message when the app cannot save, instead of doing nothing
+- [x] The version in package-lock.json now matches the app (it said 1.3.0)
 
 ### v1.5 - Location
 - [ ] Auto-detect my location on first launch

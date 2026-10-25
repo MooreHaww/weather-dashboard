@@ -302,11 +302,20 @@ async function boot(): Promise<void> {
   setupSidebar({
     onSelect: (p) => void selectPlace(p),
     onRemoveFavorite: async (p) => {
-      app.state.favorites = await api.removeFavorite(p.id);
-      render();
+      try {
+        app.state.favorites = await api.removeFavorite(p.id);
+        render();
+      } catch (err) {
+        showBanner((err as Error).message); // the server could not save: say so, keep the list as it is
+      }
     },
     onClearRecent: async () => {
-      app.state.recent = await api.clearRecent();
+      try {
+        app.state.recent = await api.clearRecent();
+      } catch (err) {
+        showBanner((err as Error).message);
+        return;
+      }
       renderCards();
       // The button hides itself; give keyboard focus a useful place instead of the page.
       if (document.activeElement === document.body) search.focus();
@@ -325,7 +334,7 @@ async function boot(): Promise<void> {
     now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
   });
   $('#refresh').addEventListener('click', () => void refresh());
-  setupUpdateReady();
+  setupUpdateReady({ timeFormat: () => app.state.settings.timeFormat });
 
   document.addEventListener('keydown', (e) => {
     // F5 / Ctrl+R refresh the current city. The app has no menu, so they never reload the page.

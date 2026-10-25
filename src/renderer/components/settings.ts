@@ -26,15 +26,17 @@ export interface SettingsBindings {
   now(): string;
 }
 
-/** The app version from package.json, set at build time (vite.config.mts `define`). */
-declare const __APP_VERSION__: string;
-
 let bindings: SettingsBindings | null = null;
 const syncers = new Set<() => void>();
 
 /** Refresh every control in the panel from the current settings (after a setting changes outside the panel). */
 export function syncSettingsControls(): void {
   syncers.forEach((fn) => fn());
+}
+
+/** Run `fn` whenever the panel is synced (a setting changed, or the minute tick). For text outside the segmented controls. */
+export function onSettingsSync(fn: () => void): void {
+  syncers.add(fn);
 }
 
 /** A row of mutually exclusive buttons (radio-group semantics), styled as a pill group. */
@@ -147,8 +149,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 let rowCount = 0;
 
-/** One labelled setting: label (and optional description) on the left, the control on the right. */
-export function settingsRow(opts: { label: string; description?: string; control: HTMLElement }): HTMLElement {
+/** One labelled setting: label (and optional description) on the left, the control on the right (none for a plain information row). */
+export function settingsRow(opts: { label: string; description?: string; control?: HTMLElement }): HTMLElement {
   const n = ++rowCount;
   const row = document.createElement('div');
   row.className = 'settings-row';
@@ -158,13 +160,16 @@ export function settingsRow(opts: { label: string; description?: string; control
   const label = document.createElement('label');
   label.className = 'settings-row-label';
   label.textContent = opts.label;
-  opts.control.id ||= `settings-control-${n}`;
-  if (opts.control.matches('input, select, textarea, button, meter, output, progress')) {
-    label.htmlFor = opts.control.id;
-  } else {
-    // A label can't point at a div; name the control (e.g. a radio group) from the label instead.
-    label.id = `settings-label-${n}`;
-    opts.control.setAttribute('aria-labelledby', label.id);
+  const { control: widget } = opts;
+  if (widget) {
+    widget.id ||= `settings-control-${n}`;
+    if (widget.matches('input, select, textarea, button, meter, output, progress')) {
+      label.htmlFor = widget.id;
+    } else {
+      // A label can't point at a div; name the control (e.g. a radio group) from the label instead.
+      label.id = `settings-label-${n}`;
+      widget.setAttribute('aria-labelledby', label.id);
+    }
   }
   text.append(label);
 
@@ -174,14 +179,16 @@ export function settingsRow(opts: { label: string; description?: string; control
     desc.id = `settings-desc-${n}`;
     desc.textContent = opts.description;
     text.append(desc);
-    opts.control.setAttribute('aria-describedby', desc.id);
+    widget?.setAttribute('aria-describedby', desc.id);
   }
 
-  const control = document.createElement('div');
-  control.className = 'settings-row-control';
-  control.append(opts.control);
-
-  row.append(text, control);
+  row.append(text);
+  if (widget) {
+    const control = document.createElement('div');
+    control.className = 'settings-row-control';
+    control.append(widget);
+    row.append(control);
+  }
   return row;
 }
 
@@ -233,12 +240,6 @@ export function setupSettings(b: SettingsBindings): { open: () => void; close: (
 
   const sections = document.getElementById('settings-sections')!;
   renderSettingsSections(sections);
-  // The app version, last in the panel (it scrolls with the sections).
-  const version = document.createElement('p');
-  version.id = 'settings-version';
-  version.className = 'settings-version';
-  version.textContent = `Version ${__APP_VERSION__}`;
-  sections.append(version);
   syncSettingsControls();
 
   let open = false;

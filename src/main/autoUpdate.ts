@@ -5,8 +5,11 @@
 // - First check a little after startup, then every few hours.
 // - Downloads in the background and installs when the app quits; never restarts the app
 //   by itself (only "Update now" in Settings does, see updateRestart.ts).
+// - Tells the tracker (updateTracker.ts) how each check went, for the Settings "Updates" section.
 // - Every failure (offline, GitHub down, rate limit, bad file) is logged and ignored;
 //   the next check simply tries again.
+
+import type { UpdateTracker } from './updateTracker';
 
 export const FIRST_CHECK_DELAY_MS = 10_000;
 export const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -18,7 +21,8 @@ export interface Updater {
   logger: unknown;
   checkForUpdates(): Promise<unknown> | unknown;
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
-  on(event: 'update-downloaded', listener: (info: { version: string }) => void): unknown;
+  on(event: 'update-downloaded' | 'update-available', listener: (info: { version: string }) => void): unknown;
+  on(event: 'update-not-available', listener: (info: unknown) => void): unknown;
   on(event: 'error', listener: (err: Error) => void): unknown;
 }
 
@@ -27,6 +31,8 @@ type Level = 'info' | 'warn' | 'error';
 export interface AutoUpdateOptions {
   enabled: boolean;
   loadUpdater: () => Promise<Updater>;
+  /** What the Settings section shows; this module reports each check's outcome to it. */
+  tracker: UpdateTracker;
   /** Called once per downloaded version. */
   onReady: (version: string) => void;
   log: (level: Level, message: string) => void;
@@ -43,7 +49,7 @@ export interface AutoUpdate {
 
 export function startAutoUpdate(opts: AutoUpdateOptions): AutoUpdate {
   if (!opts.enabled) return { updater: () => null };
-  const { log, onReady } = opts;
+  const { log, onReady, tracker } = opts;
   const later = opts.setTimeout ?? setTimeout;
   const every = opts.setInterval ?? setInterval;
   let updater: Updater | null = null;
@@ -62,10 +68,18 @@ export function startAutoUpdate(opts: AutoUpdateOptions): AutoUpdate {
       error: (m: unknown) => log('warn', `[update] ${String(m)}`),
       debug: () => {},
     };
-    u.on('error', (err) => log('warn', `[update] ${message(err)}`));
+    u.on('error', (err) => {
+      log('warn', `[update] ${message(err)}`);
+      tracker.failed();
+    });
+    u.on('update-available', (info) => {
+      if (typeof info?.version === 'string') tracker.available(info.version);
+    });
+    u.on('update-not-available', () => tracker.notAvailable());
     u.on('update-downloaded', (info) => {
       if (!info?.version || info.version === notified) return;
       notified = info.version;
+      tracker.downloaded(info.version);
       onReady(info.version);
     });
     updater = u;
@@ -77,6 +91,7 @@ export function startAutoUpdate(opts: AutoUpdateOptions): AutoUpdate {
       await (await load()).checkForUpdates();
     } catch (err) {
       log('warn', `[update] check failed: ${message(err)}`);
+      tracker.failed();
     }
   }
 

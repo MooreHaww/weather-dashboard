@@ -1,7 +1,7 @@
 {
   "name": "weather-dashboard",
   "productName": "Weather Dashboard",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "description": "A dark, modern desktop weather app powered by Open-Meteo.",
   "author": "Mohammad (Moore) Hawwari",
   "license": "MIT",

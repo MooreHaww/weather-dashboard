@@ -95,6 +95,7 @@ describe('settings panel', () => {
     expect(await focusInPanel()).toBe(true);
     // Exactly the real sections: no placeholders for startup, close behavior or widget.
     expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
+      'Updates',
       'Units',
       'Time format',
       'Temperature chart',

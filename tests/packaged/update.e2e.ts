@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 import { checkReleaseFiles } from '../../scripts/release-files';
 import { FIRST_CHECK_DELAY_MS } from '../../src/main/autoUpdate';
-import { readyLabel, UPDATE_NOTE_DETAIL, updateMessage } from '../../src/renderer/components/updateNote';
+import { UPDATE_NOTE_DETAIL, updateMessage } from '../../src/renderer/components/updateNote';
 
 const root = path.join(__dirname, '..', '..');
 const release = path.join(root, 'release');
@@ -29,33 +29,44 @@ const { version } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'ut
 const NEXT = '9.9.9';
 const INSTALLER = `Weather-Dashboard-Setup-${NEXT}.exe`;
 
-/** A fake update feed: latest.yml for version 9.9.9 and a small fake installer (or a 503 for everything). */
-async function startFeed(mode: 'ok' | 'down') {
+type FeedMode = 'ok' | 'same' | 'down';
+
+/**
+ * A fake update feed. 'ok': latest.yml for version 9.9.9 and a small fake installer. 'same': latest.yml
+ * for the installed version (nothing newer). 'down': a 503 for everything. `mode` can change while the
+ * app runs. With `holdInstaller`, the installer request is not answered until `release()`, so the app
+ * stays in "downloading".
+ */
+async function startFeed(initial: FeedMode, opts: { holdInstaller?: boolean } = {}) {
   const body = randomBytes(64 * 1024);
   const sha512 = createHash('sha512').update(body).digest('base64');
-  const yml = [
-    `version: ${NEXT}`,
-    'files:',
-    `  - url: ${INSTALLER}`,
-    `    sha512: ${sha512}`,
-    `    size: ${body.length}`,
-    `path: ${INSTALLER}`,
-    `sha512: ${sha512}`,
-    `releaseDate: '${new Date().toISOString()}'`,
-    '',
-  ].join('\n');
+  const ymlFor = (v: string) =>
+    [
+      `version: ${v}`,
+      'files:',
+      `  - url: Weather-Dashboard-Setup-${v}.exe`,
+      `    sha512: ${sha512}`,
+      `    size: ${body.length}`,
+      `path: Weather-Dashboard-Setup-${v}.exe`,
+      `sha512: ${sha512}`,
+      `releaseDate: '${new Date().toISOString()}'`,
+      '',
+    ].join('\n');
+  let release: () => void = () => {};
+  const gate = opts.holdInstaller ? new Promise<void>((r) => (release = r)) : Promise.resolve();
   const requests: string[] = [];
+  const feed = { mode: initial, url: '', requests, release: () => release(), close: () => new Promise((r) => server.close(r)) };
   const server: Server = createServer((req, res) => {
     const name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1));
     requests.push(name);
-    if (mode === 'down') return void res.writeHead(503).end('Service Unavailable');
-    if (name === 'latest.yml') return void res.writeHead(200, { 'Content-Type': 'text/yaml' }).end(yml);
-    if (name === INSTALLER) return void res.writeHead(200, { 'Content-Length': body.length }).end(body);
+    if (feed.mode === 'down') return void res.writeHead(503).end('Service Unavailable');
+    if (name === 'latest.yml') return void res.writeHead(200, { 'Content-Type': 'text/yaml' }).end(ymlFor(feed.mode === 'same' ? version : NEXT));
+    if (name === INSTALLER) return void gate.then(() => res.writeHead(200, { 'Content-Length': body.length }).end(body));
     res.writeHead(404).end();
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
-  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  return { url, requests, close: () => new Promise((r) => server.close(r)) };
+  feed.url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return feed;
 }
 
 let app: LaunchedApp | undefined;
@@ -70,8 +81,8 @@ afterEach(async () => {
 });
 
 /** Launch the packaged app and point its updater at the local feed before the first check fires. */
-async function launchWithFeed(mode: 'ok' | 'down') {
-  feed = await startFeed(mode);
+async function launchWithFeed(mode: FeedMode, opts: { holdInstaller?: boolean } = {}) {
+  feed = await startFeed(mode, opts);
   cacheDir = await mkdtemp(path.join(tmpdir(), 'wd-update-cache-'));
   const started = Date.now();
   app = await launchApp(undefined, { executable: exe, env: { LOCALAPPDATA: cacheDir } });
@@ -133,7 +144,16 @@ async function openSettings(page: AppPage) {
   await new Promise((r) => setTimeout(r, 500));
 }
 
-const noteVisible = `!document.getElementById('update-note').hidden`;
+/** The Updates section: its main line, and its small second line (null when there is none). */
+const updatesLabel = `document.querySelector('#settings-updates .settings-row-label').textContent`;
+const updatesDetail = `document.querySelector('#settings-updates .settings-row-description')?.textContent ?? null`;
+const updateButton = `document.getElementById('update-now') !== null`;
+/** "Version 1.4.7 · Up to date · checked 10:42 AM" (12-hour is the default setting). */
+const upToDate = new RegExp(`^Version ${version.replaceAll('.', '\\.')} · Up to date · checked \\d{1,2}:\\d{2} (AM|PM)$`);
+/** No red dot, no corner note and the plain gear label. */
+const noSignals = `document.querySelectorAll('#settings-button .update-dot').length === 0 && document.getElementById('update-note').hidden && document.getElementById('settings-button').getAttribute('aria-label') === 'Settings'`;
+
+const noteVisible =`!document.getElementById('update-note').hidden`;
 const dotCount = `document.querySelectorAll('#settings-button .update-dot').length`;
 
 describe('release files', () => {
@@ -160,10 +180,21 @@ describe('release files', () => {
 describe('auto-update in the packaged app', () => {
   it('finds a newer version, downloads it and shows the message once', async () => {
     expect(existsSync(exe), 'run npm run dist first').toBe(true);
-    const { page, errors } = await launchWithFeed('ok');
+    const { page, errors } = await launchWithFeed('ok', { holdInstaller: true });
     await waitForDashboard(page);
 
-    await page.waitFor(noteVisible, FIRST_CHECK_DELAY_MS + 30_000);
+    // The section says "downloading" while the installer is on its way: no button, no dot, no note yet.
+    await openSettings(page);
+    await page.waitFor(`/is downloading/.test(${updatesLabel})`, FIRST_CHECK_DELAY_MS + 30_000);
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${NEXT} is downloading…`);
+    expect(await page.evaluate<string>(updatesDetail)).toBe(`Installed version ${version}`);
+    expect(await page.evaluate<boolean>(updateButton)).toBe(false);
+    expect(await page.evaluate<boolean>(noSignals)).toBe(true);
+    await page.press('Escape');
+    await page.waitFor(`document.getElementById('settings').hidden`, 2000);
+    feed!.release();
+
+    await page.waitFor(noteVisible, 30_000);
     expect(feed!.requests).toContain('latest.yml');
     expect(feed!.requests).toContain(INSTALLER);
     const pending = await readdir(path.join(cacheDir!, 'weather-dashboard-updater', 'pending'));
@@ -193,11 +224,13 @@ describe('auto-update in the packaged app', () => {
     expect(await page.evaluate<boolean>(noteVisible)).toBe(false);
     expect(await page.evaluate<number>(dotCount)).toBe(1); // dismissing the note keeps the dot
 
-    // Settings: "Version 9.9.9 is ready" with Update now, on top; the app's own version stays last.
+    // Settings: the Updates section on top says "Version 9.9.9 is ready", with Update now and the installed version.
     await openSettings(page);
-    expect(await page.evaluate<string>(`document.querySelector('#settings-sections > section h3').textContent`)).toBe('Update');
-    expect(await page.evaluate<string>(`document.querySelector('#settings-update .settings-row-label').textContent`)).toBe(readyLabel(NEXT));
-    expect(await page.evaluate<string>(`document.getElementById('settings-version').textContent`)).toBe(`Version ${version}`);
+    expect(await page.evaluate<string>(`document.querySelector('#settings-sections > section h3').textContent`)).toBe('Updates');
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${NEXT} is ready`);
+    expect(await page.evaluate<string>(updatesDetail)).toBe(`Installed version ${version}`);
+    expect(await page.evaluate<boolean>(`document.getElementById('settings-version') === null`)).toBe(true);
+    expect(await page.evaluate<string>(`Object.keys(window.updates).sort().join()`)).toBe('onReady,onState,restart'); // receive-only, plus the one restart message
 
     // Update now asks first. Later and Escape change nothing.
     await clickOn(page, '#update-now');
@@ -299,17 +332,60 @@ describe('auto-update in the packaged app', () => {
     expect(await page.evaluate<boolean>(noteVisible)).toBe(false);
     expect(await page.evaluate<boolean>(`document.getElementById('banner').hidden`)).toBe(true);
     expect(await page.evaluate<number>(`document.querySelectorAll('.forecast .day').length`)).toBe(7);
-    // No dot, no Update row, and "Update now" from the page does nothing.
-    expect(await page.evaluate<number>(dotCount)).toBe(0);
-    expect(await page.evaluate<string>(`document.getElementById('settings-button').getAttribute('aria-label')`)).toBe('Settings');
-    expect(await page.evaluate<boolean>(`document.getElementById('settings-update') === null`)).toBe(true);
+    // No dot, no button, and "Update now" from the page does nothing.
+    expect(await page.evaluate<boolean>(noSignals)).toBe(true);
+    expect(await page.evaluate<boolean>(`document.getElementById('settings-version') === null`)).toBe(true);
     await page.evaluate(`window.updates.restart()`);
     await new Promise((r) => setTimeout(r, 1000));
     expect(await restarts()).toEqual([]);
-    // The version in Settings is the installed app's own version.
+    // The Updates section: the installed app's own version and a neutral line, never "Up to date".
     const appVersion = await app!.evaluateMain<string>(`return process.mainModule.require('electron').app.getVersion();`);
     expect(appVersion).toBe(version);
-    expect(await page.evaluate<string>(`document.getElementById('settings-version').textContent`)).toBe(`Version ${appVersion}`);
+    await openSettings(page);
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${appVersion}`);
+    expect(await page.evaluate<string>(updatesDetail)).toBe("Couldn't check for updates");
+    expect(await page.evaluate<boolean>(updateButton)).toBe(false);
+    expect(await page.evaluate<boolean>(`!/Up to date/.test(document.getElementById('settings-updates').textContent)`)).toBe(true);
+
+    // The feed comes back: the next check clears the failure, and now it is a real "up to date".
+    feed!.mode = 'same';
+    await app!.evaluateMain(`await process.mainModule.require('electron-updater').autoUpdater.checkForUpdates();`);
+    await page.waitFor(`/Up to date/.test(${updatesLabel})`, 5000);
+    expect(await page.evaluate<string>(updatesLabel)).toMatch(upToDate);
+    expect(await page.evaluate<string | null>(updatesDetail)).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('before the first check only the version shows; after a check that finds nothing newer it says "Up to date" and when', async () => {
+    const { page, errors } = await launchWithFeed('same');
+    await waitForDashboard(page);
+    // Long before the first check (10 s): nothing has been asked, so nothing is claimed.
+    expect(feed!.requests).toEqual([]);
+    await openSettings(page);
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${version}`);
+    expect(await page.evaluate<string | null>(updatesDetail)).toBeNull();
+    expect(await page.evaluate<boolean>(updateButton)).toBe(false);
+    expect(await page.evaluate<boolean>(noSignals)).toBe(true);
+
+    await page.waitFor(`/Up to date/.test(${updatesLabel})`, FIRST_CHECK_DELAY_MS + 30_000);
+    expect(feed!.requests).toContain('latest.yml');
+    expect(feed!.requests).not.toContain(INSTALLER); // nothing newer, nothing downloaded
+    const shown = await page.evaluate<string>(updatesLabel);
+    expect(shown).toMatch(upToDate);
+    expect(await page.evaluate<boolean>(updateButton)).toBe(false);
+    expect(await page.evaluate<boolean>(noSignals)).toBe(true);
+
+    // "checked" is the PC's time, within a minute or two of now.
+    const [, hh, mm, ap] = /checked (\d{1,2}):(\d{2}) (AM|PM)$/.exec(shown)!;
+    const now = new Date();
+    const minutes = ((Number(hh) % 12) + (ap === 'PM' ? 12 : 0)) * 60 + Number(mm);
+    const diff = Math.abs(minutes - (now.getHours() * 60 + now.getMinutes()));
+    expect(Math.min(diff, 1440 - diff)).toBeLessThanOrEqual(2);
+
+    // It follows the 24-hour setting.
+    await clickOn(page, '#settings-time-format [data-value="24h"]');
+    await page.waitFor(`/checked \\d{2}:\\d{2}$/.test(${updatesLabel})`, 3000);
+    expect(await page.evaluate<string>(updatesLabel)).toMatch(new RegExp(`^Version ${version.replaceAll('.', '\\.')} · Up to date · checked \\d{2}:\\d{2}$`));
     expect(errors).toEqual([]);
   });
 });

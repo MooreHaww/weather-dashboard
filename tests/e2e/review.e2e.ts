@@ -3,12 +3,13 @@
 // - Clear recent: clears, saves, and keeps keyboard focus somewhere useful.
 // - F5 / Ctrl+R refresh the current city (Ctrl+K still opens search).
 // - The offline note next to "Updated ... ago".
-// - The app version at the bottom of Settings.
+// - The app version (now in the Settings Updates section, v1.4.7).
 // - The window's size and position come back after a restart (and an off-screen one is fixed).
+// - v1.4.7: a server error on remove favorite / Clear recent shows the banner instead of failing silently.
 // Run with: npm run test:e2e
 
 import { readFileSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
@@ -209,12 +210,12 @@ describe('keys, clear recent, offline note and version', () => {
     await page.waitFor(`!(${noteShown})`, 10_000);
   });
 
-  it('Settings shows the app version at the bottom', async () => {
+  it('Settings shows the app version in the Updates section at the top (this build is unpackaged, so just the version)', async () => {
     await page.evaluate(`document.getElementById('settings-button').click()`);
     await page.waitFor(`document.getElementById('settings').classList.contains('is-open')`, 2000);
-    expect(await textOf(page, '#settings-version')).toBe(`Version ${version}`);
-    const last = await page.evaluate<string>(`document.getElementById('settings-sections').lastElementChild.id`);
-    expect(last).toBe('settings-version');
+    expect(await textOf(page, '#settings-updates .settings-row-label')).toBe(`Version ${version}`);
+    expect(await page.evaluate<string>(`document.getElementById('settings-sections').firstElementChild.id`)).toBe('settings-updates');
+    expect(await page.evaluate<boolean>(`document.getElementById('settings-version') === null`)).toBe(true);
     await page.press('Escape');
   });
 
@@ -267,6 +268,41 @@ describe('window size and position', () => {
          return screen.getAllDisplays().some(({ workArea: a }) => b.x < a.x + a.width && b.x + b.width > a.x && b.y < a.y + a.height && b.y + 52 > a.y);`,
       );
       expect(onScreen).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+});
+
+describe('when the server cannot save (remove favorite, Clear recent)', () => {
+  it('shows the neutral banner, keeps the lists, throws no page exception, and the app keeps working', async () => {
+    const app = await launchApp({ lastPlace: tokyo, favorites: [tokyo, london], recent: [tokyo, london], settings: { units: 'metric' } });
+    try {
+      const { page } = app;
+      await waitForDashboard(page);
+      // The data file path becomes a folder, so the server's save (temp file + rename) really fails with a 500.
+      const file = path.join(app.dataDir, 'weather-dashboard.json');
+      await rm(file);
+      await mkdir(file);
+      const count = (list: string) => page.evaluate<number>(`document.querySelectorAll('${list} .place-card').length`);
+      const banner = () => page.evaluate<string | null>(`document.getElementById('banner').hidden ? null : document.getElementById('banner').textContent.trim()`);
+
+      await page.evaluate(`document.querySelector('#favorites .fav-remove').click()`);
+      await page.waitFor(`!document.getElementById('banner').hidden`, 5000);
+      expect(await banner()).toBe('Something went wrong');
+      expect(await count('#favorites')).toBe(2);
+
+      await page.evaluate(`document.getElementById('banner').hidden = true`);
+      await page.evaluate(`document.getElementById('clear-recent').click()`);
+      await page.waitFor(`!document.getElementById('banner').hidden`, 5000);
+      expect(await banner()).toBe('Something went wrong');
+      expect(await count('#recent')).toBe(2);
+
+      // Nothing is stuck: another city still loads, and the banner goes away with it.
+      await page.evaluate(`[...document.querySelectorAll('#favorites .place-card')].find((c) => c.textContent.includes('London')).click()`);
+      await page.waitFor(`document.querySelector('.place-name')?.textContent === 'London' && !document.getElementById('main').classList.contains('is-loading')`, 20_000);
+      expect(await banner()).toBeNull();
+      expect(app.errors).toEqual([]);
     } finally {
       await app.close();
     }

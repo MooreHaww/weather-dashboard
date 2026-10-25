@@ -636,7 +636,6 @@ a:hover { text-decoration: underline; }
 .settings-section + .settings-section { margin-top: 20px; }
 .settings-section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; margin: 0 0 8px; }
 .settings-section-description { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
-.settings-version { margin-top: 24px; text-align: center; font-size: 12px; color: var(--muted); }
 .settings-section-body { border-radius: 14px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--stroke); }
 .settings-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 12px 16px; }
 .settings-row + .settings-row { border-top: 1px solid var(--divider); }
