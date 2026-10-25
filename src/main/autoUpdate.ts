@@ -3,7 +3,8 @@
 //
 // - Only runs when `enabled` (packaged app, not dev).
 // - First check a little after startup, then every few hours.
-// - Downloads in the background and installs when the app quits; never restarts the app.
+// - Downloads in the background and installs when the app quits; never restarts the app
+//   by itself (only "Update now" in Settings does, see updateRestart.ts).
 // - Every failure (offline, GitHub down, rate limit, bad file) is logged and ignored;
 //   the next check simply tries again.
 
@@ -16,6 +17,7 @@ export interface Updater {
   autoInstallOnAppQuit: boolean;
   logger: unknown;
   checkForUpdates(): Promise<unknown> | unknown;
+  quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
   on(event: 'update-downloaded', listener: (info: { version: string }) => void): unknown;
   on(event: 'error', listener: (err: Error) => void): unknown;
 }
@@ -34,8 +36,13 @@ export interface AutoUpdateOptions {
   setInterval?: (fn: () => void, ms: number) => unknown;
 }
 
-export function startAutoUpdate(opts: AutoUpdateOptions): void {
-  if (!opts.enabled) return;
+export interface AutoUpdate {
+  /** The loaded updater, or null before the first check (and always when disabled). */
+  updater(): Updater | null;
+}
+
+export function startAutoUpdate(opts: AutoUpdateOptions): AutoUpdate {
+  if (!opts.enabled) return { updater: () => null };
   const { log, onReady } = opts;
   const later = opts.setTimeout ?? setTimeout;
   const every = opts.setInterval ?? setInterval;
@@ -77,4 +84,6 @@ export function startAutoUpdate(opts: AutoUpdateOptions): void {
     void check();
     every(() => void check(), opts.intervalMs ?? CHECK_INTERVAL_MS);
   }, opts.delayMs ?? FIRST_CHECK_DELAY_MS);
+
+  return { updater: () => updater };
 }

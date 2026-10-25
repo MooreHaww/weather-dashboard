@@ -91,6 +91,8 @@ export interface AppPage {
   press(key: keyof typeof KEYS, opts?: { shift?: boolean; ctrl?: boolean }): Promise<void>;
   /** A real left mouse click at a viewport position (goes through hit-testing like a user's click). */
   click(x: number, y: number): Promise<void>;
+  /** Move the mouse to a viewport position (for :hover). */
+  move(x: number, y: number): Promise<void>;
   /** Emulate Windows' "Animation effects: off" (prefers-reduced-motion: reduce). */
   emulateReducedMotion(on: boolean): Promise<void>;
   /** Run a script in every page load before the app's own scripts, then reload (e.g. to speed up timers). */
@@ -110,6 +112,8 @@ export interface LaunchedApp {
   /** Run an async function body in the Electron main process (Node inspector), e.g. to point the updater at a test feed. */
   evaluateMain: <T>(body: string) => Promise<T>;
   restore: () => Promise<void>;
+  /** Disconnect, then wait until the app exits by itself; resolves with its exit code (rejects after the timeout). */
+  waitForExit: (timeoutMs?: number) => Promise<number | null>;
   /** Quit the app. `keepData` leaves the data folder so a second launchApp({ dataDir }) can reopen it. */
   close: (opts?: { keepData?: boolean }) => Promise<void>;
 }
@@ -177,7 +181,12 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
     },
   );
   let exited = false;
-  child.once('exit', () => (exited = true));
+  const exitCode = new Promise<number | null>((resolve) =>
+    child.once('exit', (code) => {
+      exited = true;
+      resolve(code);
+    }),
+  );
 
   const inspectorUrl = new Promise<string>((resolve, reject) => {
     let output = '';
@@ -243,6 +252,9 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
         await cdp.send('Input.dispatchMouseEvent', { type, x, y, button: 'left', buttons: 1, clickCount: 1 });
       }
     },
+    async move(x, y) {
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+    },
     async emulateReducedMotion(on) {
       await cdp.send('Emulation.setEmulatedMedia', {
         features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }],
@@ -282,6 +294,16 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
     async restore() {
       await inMain(`win.unmaximize();`);
       await settle();
+    },
+    waitForExit(timeoutMs = 15_000) {
+      // Node keeps an exiting process alive while a debugger is attached ("Waiting for the
+      // debugger to disconnect"), so let go of both DevTools connections first.
+      cdp.close();
+      main.close();
+      return Promise.race([
+        exitCode,
+        sleep(timeoutMs).then(() => Promise.reject(new Error(`The app did not exit within ${timeoutMs} ms`))),
+      ]);
     },
     async close({ keepData = false } = {}) {
       cdp.close();

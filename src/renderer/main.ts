@@ -9,7 +9,7 @@ import { renderHero, tickClock } from './components/hero';
 import { setupSearch } from './components/search';
 import { setupSettings, syncSettingsControls } from './components/settings';
 import { renderSidebar, setupSidebar, type CardWeather } from './components/sidebar';
-import { setupUpdateNote } from './components/updateNote';
+import { setupUpdateReady } from './components/updateNote';
 import { $, esc, round } from './dom';
 import { glyphs } from './icons';
 import { createRefresher } from './refresh';
@@ -325,7 +325,7 @@ async function boot(): Promise<void> {
     now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
   });
   $('#refresh').addEventListener('click', () => void refresh());
-  setupUpdateNote();
+  setupUpdateReady();
 
   document.addEventListener('keydown', (e) => {
     // F5 / Ctrl+R refresh the current city. The app has no menu, so they never reload the page.

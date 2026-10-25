@@ -7,6 +7,7 @@ class FakeUpdater extends EventEmitter {
   autoInstallOnAppQuit = false;
   logger: unknown = console;
   checkForUpdates = vi.fn<() => Promise<unknown> | unknown>(async () => null);
+  quitAndInstall = vi.fn();
 }
 
 function setup(opts: { enabled?: boolean; loadFails?: number } = {}) {
@@ -18,8 +19,8 @@ function setup(opts: { enabled?: boolean; loadFails?: number } = {}) {
   });
   const onReady = vi.fn();
   const log = vi.fn();
-  startAutoUpdate({ enabled: opts.enabled ?? true, loadUpdater, onReady, log });
-  return { updater, loadUpdater, onReady, log };
+  const handle = startAutoUpdate({ enabled: opts.enabled ?? true, loadUpdater, onReady, log });
+  return { updater, loadUpdater, onReady, log, handle };
 }
 
 describe('auto-update scheduling', () => {
@@ -98,6 +99,16 @@ describe('auto-update scheduling', () => {
     expect(() => updater.emit('error', new Error('sha512 checksum mismatch'))).not.toThrow();
     expect(log).toHaveBeenCalledWith('warn', expect.stringContaining('sha512 checksum mismatch'));
     expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it('hands out the loaded updater (for "Update now"), and never calls quitAndInstall itself', async () => {
+    const { updater, handle } = setup();
+    expect(handle.updater()).toBeNull(); // not loaded before the first check
+    await vi.advanceTimersByTimeAsync(FIRST_CHECK_DELAY_MS);
+    expect(handle.updater()).toBe(updater);
+    updater.emit('update-downloaded', { version: '1.4.7' });
+    expect(updater.quitAndInstall).not.toHaveBeenCalled();
+    expect(setup({ enabled: false }).handle.updater()).toBeNull();
   });
 
   it('reports a downloaded update once per version', async () => {

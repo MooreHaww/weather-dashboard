@@ -1,13 +1,14 @@
 // Electron entry point: start the embedded Express server on localhost, then
 // open a hardened window that loads the dashboard from it.
 
-import { app, BrowserWindow, Menu, screen, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, screen, session, shell } from 'electron';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import path from 'node:path';
 import { createApp } from '../server/app';
 import { createLogger } from '../server/logger';
 import { startAutoUpdate, type Updater } from './autoUpdate';
+import { createRestartHandler, RESTART_CHANNEL } from './updateRestart';
 import { loadWindowState, restoreBounds, saveWindowState } from './windowState';
 
 const devUrl = process.env.VITE_DEV_URL || undefined; // set by `npm run dev`; empty counts as unset
@@ -20,6 +21,13 @@ function dataDir(): string {
   if (process.env.WD_DATA_DIR) return process.env.WD_DATA_DIR; // tests and screenshots
   const base = app.getPath('userData'); // %APPDATA%\Weather Dashboard
   return devUrl ? path.join(base, 'dev') : base;
+}
+
+const windowStateFile = () => path.join(dataDir(), 'window-state.json');
+
+/** Save the window's size, position and maximized state (on close, and before an update restart). */
+function saveWindow(): void {
+  if (win) saveWindowState(windowStateFile(), { ...win.getNormalBounds(), maximized: win.isMaximized() });
 }
 
 function startServer(): Promise<string> {
@@ -43,8 +51,7 @@ function startServer(): Promise<string> {
 function createWindow(url: string): void {
   const origin = new URL(url).origin;
   // Last size and position (window-state.json), checked against the screens there are now.
-  const stateFile = path.join(dataDir(), 'window-state.json');
-  const bounds = restoreBounds(loadWindowState(stateFile), screen.getAllDisplays().map((d) => d.workArea));
+  const bounds = restoreBounds(loadWindowState(windowStateFile()), screen.getAllDisplays().map((d) => d.workArea));
   win = new BrowserWindow({
     x: bounds.x,
     y: bounds.y,
@@ -62,7 +69,7 @@ function createWindow(url: string): void {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
-      preload: path.join(__dirname, 'preload.js'), // only relays "update ready"
+      preload: path.join(__dirname, 'preload.js'), // relays "update ready", and "Update now" back
     },
   });
 
@@ -80,9 +87,7 @@ function createWindow(url: string): void {
     if (bounds.maximized) win?.maximize();
     win?.show();
   });
-  win.on('close', () => {
-    if (win) saveWindowState(stateFile, { ...win.getNormalBounds(), maximized: win.isMaximized() });
-  });
+  win.on('close', saveWindow);
   win.on('closed', () => (win = null));
   void win.loadURL(devUrl ?? url);
 }
@@ -105,15 +110,17 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     // The dashboard needs no camera, location, notifications, etc.
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
+    let url: string;
     try {
-      createWindow(await startServer());
+      url = await startServer();
+      createWindow(url);
     } catch (err) {
       log('error', `Failed to start: ${(err as Error).stack}`);
       app.quit();
       return;
     }
     // Updates come from GitHub Releases (see electron-builder.yml `publish`), only in the installed app.
-    startAutoUpdate({
+    const updates = startAutoUpdate({
       enabled: app.isPackaged && !devUrl,
       // Loaded on the first check, not at startup. `autoUpdater` is a getter on the CommonJS
       // exports, so a dynamic import only has it on `.default`.
@@ -124,6 +131,18 @@ if (!app.requestSingleInstanceLock()) {
       },
       log,
     });
+    // "Update now" in Settings: the only message the page can send (no arguments; checked in updateRestart.ts).
+    ipcMain.on(
+      RESTART_CHANNEL,
+      createRestartHandler({
+        window: () => win,
+        origin: new URL(url).origin,
+        updateReady: () => updateReady,
+        updater: updates.updater,
+        saveWindowState: saveWindow,
+        log,
+      }),
+    );
   });
 
   app.on('window-all-closed', () => app.quit());
