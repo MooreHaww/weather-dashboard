@@ -2,6 +2,7 @@
 // the whole window, frosting the dashboard behind it. Add sections to
 // SETTINGS_SECTIONS below (see "Settings panel" in the README).
 
+import { LOCATION_PRIVACY_LINE } from '../../shared/locationText';
 import { formatTime } from '../../shared/time';
 import { WIND_LABELS, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
 
@@ -22,6 +23,10 @@ export interface SettingsBindings {
   setWindUnit(windUnit: WindUnit): void;
   setTimeFormat(timeFormat: TimeFormat): void;
   setTempLabels(tempLabels: TempLabels): void;
+  /** The "Use my location" switch: on asks the server for the place (and the answer comes back through a sync), off forgets it. */
+  setLocation(on: boolean): void;
+  /** The line under the switch (see locationStatus in shared/locationText.ts). */
+  locationStatus(): string;
   /** The selected city's current local time ("YYYY-MM-DDTHH:mm:ss"), used for the time-format examples. */
   now(): string;
 }
@@ -72,6 +77,23 @@ export function segmentedControl<T extends string>(opts: {
   syncers.add(sync);
   sync();
   return group;
+}
+
+/**
+ * An on/off switch (role="switch"). Pressing it calls `onChange` with the new value; the caller
+ * changes the setting and syncs the panel, which is what flips `aria-checked`.
+ */
+export function switchControl(opts: { current: () => boolean; onChange: (on: boolean) => void }): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'switch';
+  b.setAttribute('role', 'switch');
+  b.innerHTML = '<span class="switch-knob" aria-hidden="true"></span>';
+  b.addEventListener('click', () => opts.onChange(b.getAttribute('aria-checked') !== 'true'));
+  const sync = () => b.setAttribute('aria-checked', String(opts.current()));
+  syncers.add(sync);
+  sync();
+  return b;
 }
 
 /** Add future settings sections here, in display order. */
@@ -143,6 +165,28 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           }),
         }),
       );
+    },
+  },
+  {
+    id: 'location',
+    title: 'Location',
+    description: LOCATION_PRIVACY_LINE,
+    render(body) {
+      const row = settingsRow({
+        label: 'Use my location',
+        description: bindings!.locationStatus(),
+        control: switchControl({
+          current: () => bindings!.get().location === 'on',
+          onChange: (on) => bindings!.setLocation(on),
+        }),
+      });
+      const status = row.querySelector('.settings-row-description')!;
+      status.id = 'settings-location-status';
+      onSettingsSync(() => {
+        const text = bindings!.locationStatus();
+        if (status.textContent !== text) status.textContent = text;
+      });
+      body.append(row);
     },
   },
 ];

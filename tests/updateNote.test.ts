@@ -22,7 +22,7 @@ beforeEach(() => {
     '<div id="settings-sections"><section id="settings-units"></section></div></section></div>';
   restart = vi.fn<() => void>();
   format = '12h';
-  window.updates = { onReady: (cb) => (fire = cb), onState: (cb) => (fireState = cb), restart };
+  window.updates = { onReady: (cb) => (fire = cb), onState: (cb) => (fireState = cb), restart, checkNow: vi.fn() };
   setupUpdateReady({ timeFormat: () => format });
 });
 

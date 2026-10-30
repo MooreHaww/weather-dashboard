@@ -23,11 +23,19 @@ export interface UpdateTracker {
   downloaded(version: string): void;
   /** A check or a download failed. */
   failed(): void;
+  /**
+   * "Check for updates" was pressed: show "Checking…". Returns false (and changes nothing) when a
+   * check makes no sense: no updater, an update is downloading or ready, or one is already running.
+   */
+  checking(): boolean;
+  /** The check returned. If no event moved the state on (still "checking"), go back to what it was. */
+  settle(): void;
 }
 
 export function createUpdateTracker(opts: UpdateTrackerOptions): UpdateTracker {
   const now = opts.now ?? Date.now;
   let state: UpdateState = { status: opts.enabled ? 'idle' : 'unavailable', version: opts.version };
+  let before: UpdateState = state; // what "checking" replaced
 
   const set = (next: UpdateState) => {
     state = next;
@@ -54,6 +62,15 @@ export function createUpdateTracker(opts: UpdateTrackerOptions): UpdateTracker {
     failed() {
       if (!opts.enabled || isReady() || state.status === 'failed') return;
       set({ status: 'failed', version: opts.version });
+    },
+    checking() {
+      if (!opts.enabled || !['idle', 'up-to-date', 'failed'].includes(state.status)) return false;
+      before = state;
+      set({ status: 'checking', version: opts.version });
+      return true;
+    },
+    settle() {
+      if (state.status === 'checking') set(before);
     },
   };
 }

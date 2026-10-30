@@ -35,7 +35,8 @@ type FeedMode = 'ok' | 'same' | 'down';
  * A fake update feed. 'ok': latest.yml for version 9.9.9 and a small fake installer. 'same': latest.yml
  * for the installed version (nothing newer). 'down': a 503 for everything. `mode` can change while the
  * app runs. With `holdInstaller`, the installer request is not answered until `release()`, so the app
- * stays in "downloading".
+ * stays in "downloading". `holdYml()` makes the next latest.yml requests wait for `releaseYml()`, so the
+ * app stays in "checking".
  */
 async function startFeed(initial: FeedMode, opts: { holdInstaller?: boolean } = {}) {
   const body = randomBytes(64 * 1024);
@@ -55,12 +56,26 @@ async function startFeed(initial: FeedMode, opts: { holdInstaller?: boolean } = 
   let release: () => void = () => {};
   const gate = opts.holdInstaller ? new Promise<void>((r) => (release = r)) : Promise.resolve();
   const requests: string[] = [];
-  const feed = { mode: initial, url: '', requests, release: () => release(), close: () => new Promise((r) => server.close(r)) };
+  let ymlGate: Promise<void> = Promise.resolve();
+  let releaseYml: () => void = () => {};
+  const feed = {
+    mode: initial,
+    url: '',
+    requests,
+    release: () => release(),
+    holdYml: () => void (ymlGate = new Promise<void>((r) => (releaseYml = r))),
+    releaseYml: () => releaseYml(),
+    /** How many times latest.yml was asked for. */
+    checks: () => requests.filter((n) => n === 'latest.yml').length,
+    close: () => new Promise((r) => server.close(r)),
+  };
   const server: Server = createServer((req, res) => {
     const name = decodeURIComponent(new URL(req.url ?? '/', 'http://x').pathname.slice(1));
     requests.push(name);
     if (feed.mode === 'down') return void res.writeHead(503).end('Service Unavailable');
-    if (name === 'latest.yml') return void res.writeHead(200, { 'Content-Type': 'text/yaml' }).end(ymlFor(feed.mode === 'same' ? version : NEXT));
+    if (name === 'latest.yml') {
+      return void ymlGate.then(() => res.writeHead(200, { 'Content-Type': 'text/yaml' }).end(ymlFor(feed.mode === 'same' ? version : NEXT)));
+    }
     if (name === INSTALLER) return void gate.then(() => res.writeHead(200, { 'Content-Length': body.length }).end(body));
     res.writeHead(404).end();
   });
@@ -230,7 +245,7 @@ describe('auto-update in the packaged app', () => {
     expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${NEXT} is ready`);
     expect(await page.evaluate<string>(updatesDetail)).toBe(`Installed version ${version}`);
     expect(await page.evaluate<boolean>(`document.getElementById('settings-version') === null`)).toBe(true);
-    expect(await page.evaluate<string>(`Object.keys(window.updates).sort().join()`)).toBe('onReady,onState,restart'); // receive-only, plus the one restart message
+    expect(await page.evaluate<string>(`Object.keys(window.updates).sort().join()`)).toBe('checkNow,onReady,onState,restart'); // receive-only, plus the restart and check messages (no arguments)
 
     // Update now asks first. Later and Escape change nothing.
     await clickOn(page, '#update-now');
@@ -387,5 +402,105 @@ describe('auto-update in the packaged app', () => {
     await page.waitFor(`/checked \\d{2}:\\d{2}$/.test(${updatesLabel})`, 3000);
     expect(await page.evaluate<string>(updatesLabel)).toMatch(new RegExp(`^Version ${version.replaceAll('.', '\\.')} · Up to date · checked \\d{2}:\\d{2}$`));
     expect(errors).toEqual([]);
+  });
+});
+
+describe('"Check for updates" in Settings', () => {
+  const checkButton = `document.getElementById('update-check')`;
+  const buttonText = `${checkButton}?.textContent ?? null`;
+  const waitUpToDate = async (page: AppPage) => page.waitFor(`/Up to date/.test(${updatesLabel})`, FIRST_CHECK_DELAY_MS + 30_000);
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('is there before any check (nothing is claimed), then runs one check at a time: "Checking…", the result, and a second press within 30 seconds does nothing', async () => {
+    const { page, errors } = await launchWithFeed('same');
+    await waitForDashboard(page);
+    await openSettings(page);
+    // Before the first automatic check: the version only, and the button.
+    expect(feed!.requests).toEqual([]);
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${version}`);
+    expect(await page.evaluate<string>(buttonText)).toBe('Check for updates');
+    expect(await page.evaluate<string>(`${checkButton}.getAttribute('aria-describedby')`)).toBeTruthy();
+
+    await waitUpToDate(page); // the app's own first check
+    expect(feed!.checks()).toBe(1);
+    expect(await page.evaluate<string>(updatesLabel)).toMatch(upToDate);
+    expect(await page.evaluate<string>(buttonText)).toBe('Check for updates');
+
+    // A real click starts a check; the feed holds its answer, so "Checking…" can be seen.
+    feed!.holdYml();
+    await clickOn(page, '#update-check');
+    await page.waitFor(`${buttonText} === 'Checking…'`, 5000);
+    expect(await page.evaluate<string>(`${checkButton}.getAttribute('aria-disabled')`)).toBe('true');
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${version}`); // nothing is claimed while it runs
+    expect(await page.evaluate<boolean>(`document.activeElement === ${checkButton}`)).toBe(true); // the click's focus is kept
+    expect(feed!.checks()).toBe(2);
+
+    // Pressing it again meanwhile changes nothing: still one check.
+    await clickOn(page, '#update-check');
+    await page.press('Enter');
+    await pause(1000);
+    expect(feed!.checks()).toBe(2);
+
+    feed!.releaseYml();
+    await page.waitFor(`${buttonText} === 'Check for updates'`, 5000);
+    expect(await page.evaluate<string>(updatesLabel)).toMatch(upToDate);
+
+    // Within 30 seconds of the last press the main process ignores the next one.
+    await clickOn(page, '#update-check');
+    await pause(2000);
+    expect(feed!.checks()).toBe(2);
+    expect(await page.evaluate<string>(buttonText)).toBe('Check for updates'); // and the row did not get stuck on "Checking…"
+    expect(await page.evaluate<string>(updatesLabel)).toMatch(upToDate);
+    expect(errors).toEqual([]);
+  });
+
+  it('after a failed check it tries again, and an update it finds is downloaded and announced (the button gives way to Update now)', async () => {
+    const { page, errors } = await launchWithFeed('down');
+    await waitForDashboard(page);
+    await openSettings(page);
+    await page.waitFor(`${updatesDetail} === "Couldn't check for updates"`, FIRST_CHECK_DELAY_MS + 30_000);
+    expect(await page.evaluate<string>(buttonText)).toBe('Check for updates');
+    expect(await page.evaluate<boolean>(noSignals)).toBe(true);
+
+    feed!.mode = 'ok'; // the feed is back, with a newer version
+    await clickOn(page, '#update-check');
+    await page.waitFor(`/is ready/.test(${updatesLabel})`, 30_000);
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${NEXT} is ready`);
+    expect(await page.evaluate<boolean>(`${checkButton} === null`)).toBe(true); // not offered while an update waits
+    expect(await page.evaluate<boolean>(updateButton)).toBe(true);
+    await page.waitFor(noteVisible, 5000);
+    expect(await page.evaluate<number>(dotCount)).toBe(1);
+    // A press from the page while an update is ready is ignored by the main process.
+    const before = feed!.checks();
+    await page.evaluate(`window.updates.checkNow()`);
+    await pause(1500);
+    expect(feed!.checks()).toBe(before);
+    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${NEXT} is ready`);
+    expect(errors).toEqual([]);
+  });
+
+  it('a check that fails says so calmly and keeps the button', async () => {
+    const { page, errors } = await launchWithFeed('same');
+    await waitForDashboard(page);
+    await openSettings(page);
+    await waitUpToDate(page);
+    feed!.mode = 'down';
+    await clickOn(page, '#update-check');
+    await page.waitFor(`${updatesDetail} === "Couldn't check for updates"`, 15_000);
+    expect(await page.evaluate<string>(buttonText)).toBe('Check for updates');
+    expect(await page.evaluate<boolean>(`!/Up to date/.test(document.getElementById('settings-updates').textContent)`)).toBe(true);
+    expect(await page.evaluate<boolean>(noteVisible)).toBe(false);
+    expect(await page.evaluate<boolean>(`document.getElementById('banner').hidden`)).toBe(true);
+    expect(errors).toEqual([]);
+  });
+
+  it('the page cannot pass anything: whatever it sends with the message, the main process asks the configured feed only', async () => {
+    const { page } = await launchWithFeed('same');
+    await waitForDashboard(page);
+    await waitUpToDate(page);
+    const before = feed!.checks();
+    await page.evaluate(`window.updates.checkNow('http://127.0.0.1:1/latest.yml', { url: 'https://example.com' })`);
+    await pause(1500);
+    expect(feed!.checks()).toBe(before + 1); // one check, of the configured feed (the preload sends no arguments)
   });
 });

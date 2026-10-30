@@ -64,6 +64,8 @@ export function stateRoutes(storage: Storage): Router {
     oneOf('timeFormat', TIME_FORMATS);
     oneOf('windUnit', WIND_UNITS);
     oneOf('tempLabels', TEMP_LABELS);
+    // The page may only answer the consent card; 'ask' is the not-answered-yet state and is never set by a request.
+    oneOf('location', ['on', 'off']);
     res.json((await storage.updateSettings(body)).settings);
   });
 

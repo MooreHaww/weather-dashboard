@@ -45,10 +45,15 @@ export interface AutoUpdateOptions {
 export interface AutoUpdate {
   /** The loaded updater, or null before the first check (and always when disabled). */
   updater(): Updater | null;
+  /**
+   * One check, asked for in Settings. The tracker shows "Checking…" meanwhile and the events of the
+   * check report the outcome; a no-op when disabled or when a check makes no sense in the current state.
+   */
+  checkNow(): Promise<void>;
 }
 
 export function startAutoUpdate(opts: AutoUpdateOptions): AutoUpdate {
-  if (!opts.enabled) return { updater: () => null };
+  if (!opts.enabled) return { updater: () => null, checkNow: async () => {} };
   const { log, onReady, tracker } = opts;
   const later = opts.setTimeout ?? setTimeout;
   const every = opts.setInterval ?? setInterval;
@@ -95,10 +100,19 @@ export function startAutoUpdate(opts: AutoUpdateOptions): AutoUpdate {
     }
   }
 
+  async function checkNow(): Promise<void> {
+    if (!tracker.checking()) return;
+    try {
+      await check();
+    } finally {
+      tracker.settle();
+    }
+  }
+
   later(() => {
     void check();
     every(() => void check(), opts.intervalMs ?? CHECK_INTERVAL_MS);
   }, opts.delayMs ?? FIRST_CHECK_DELAY_MS);
 
-  return { updater: () => updater };
+  return { updater: () => updater, checkNow };
 }

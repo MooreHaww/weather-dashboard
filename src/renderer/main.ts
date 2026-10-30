@@ -1,5 +1,16 @@
 import { localIsoIn } from '../shared/time';
-import type { AppState, CacheStatus, Place, TempLabels, TimeFormat, Units, WeatherData, WindUnit } from '../shared/types';
+import { LOCATION_PRIVACY_LINE, locationStatus, type LookupState } from '../shared/locationText';
+import {
+  LOCATION_PLACE_ID,
+  type AppState,
+  type CacheStatus,
+  type Place,
+  type TempLabels,
+  type TimeFormat,
+  type Units,
+  type WeatherData,
+  type WindUnit,
+} from '../shared/types';
 import { describeWeather } from '../shared/weatherCodes';
 import { api, ApiError } from './api';
 import { moveTempNow } from './charts';
@@ -28,7 +39,15 @@ const REFRESH_MS = 5 * 60_000;
 const CARD_CONCURRENCY = 4;
 
 const app = {
-  state: { favorites: [], recent: [], settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' }, lastPlace: null } as AppState,
+  state: {
+    favorites: [],
+    recent: [],
+    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask' },
+    lastPlace: null,
+    myLocation: null,
+  } as AppState,
+  /** The IP lookup: not running, running, or the last try failed (it tries again at the next start). */
+  lookup: 'idle' as LookupState,
   /** The city being shown or loaded (Retry and the auto-refresh load this one). */
   place: null as Place | null,
   weather: null as WeatherData | null,
@@ -81,7 +100,7 @@ function render(): void {
 
   renderHero($('#hero'), place, w, isFavorite(place), nowLocal, app.state.settings.timeFormat);
   tickClock(w.timezone, app.state.settings.timeFormat);
-  $('#star').addEventListener('click', () => void toggleFavorite());
+  document.getElementById('star')?.addEventListener('click', () => void toggleFavorite()); // no star on "Your location"
 
   const day = currentDay(w, nowLocal);
   renderForecast($('#forecast'), w, nowLocal.slice(0, 10), day);
@@ -103,7 +122,16 @@ function chooseDay(day: string): void {
 }
 
 function renderCards(): void {
-  renderSidebar(app.state.favorites, app.state.recent, app.shown?.id ?? null, app.cards);
+  const { location } = app.state.settings;
+  const place = location === 'on' ? app.state.myLocation : null;
+  renderSidebar(
+    app.state.favorites,
+    app.state.recent,
+    app.shown?.id ?? null,
+    app.cards,
+    location === 'on' ? { place, note: locationStatus(location, place, app.lookup) } : null,
+  );
+  $('#location-consent').hidden = location !== 'ask';
 }
 
 function renderUnits(): void {
@@ -135,6 +163,7 @@ const isFavorite = (p: Place) => app.state.favorites.some((f) => f.id === p.id);
 async function selectPlace(place: Place, record = true, opts: { fresh?: boolean; silent?: boolean } = {}): Promise<boolean> {
   const req = ++app.request;
   const { fresh = false, silent = false } = opts;
+  if (place.id === LOCATION_PLACE_ID) record = false; // "Your location" is not a recent search and not the next start's city
   if (app.place?.id !== place.id) app.day = null; // a new city starts on today
   app.place = place;
   if (!silent) {
@@ -234,7 +263,8 @@ async function toggleFavorite(): Promise<void> {
  */
 async function loadCardWeather(all = false, fresh = false): Promise<void> {
   const { units, windUnit } = app.state.settings;
-  const unique = new Map([...app.state.favorites, ...app.state.recent].map((p) => [p.id, p]));
+  const mine = app.state.settings.location === 'on' && app.state.myLocation ? [app.state.myLocation] : [];
+  const unique = new Map([...mine, ...app.state.favorites, ...app.state.recent].map((p) => [p.id, p]));
   const queue = [...unique.values()].filter((p) => all || app.cards.get(p.id)?.status !== 'ok');
 
   const worker = async () => {
@@ -294,6 +324,81 @@ function setTimeFormat(timeFormat: TimeFormat): void {
   render();
 }
 
+// ---------- location (v1.5) ----------
+
+/**
+ * Ask the server for the place (it refuses unless the saved setting is "on"). One try per call:
+ * a failure only changes the note under "Your location" and in Settings; nothing is shown as an error.
+ * Never takes over the screen from a city the user picked meanwhile.
+ */
+async function findMyLocation(): Promise<void> {
+  if (app.state.settings.location !== 'on' || app.lookup === 'looking') return;
+  const started = app.request;
+  app.lookup = 'looking';
+  syncSettingsControls();
+  renderCards();
+  let place: Place;
+  try {
+    place = await api.detectLocation();
+  } catch {
+    app.lookup = 'failed';
+    syncSettingsControls();
+    renderCards();
+    return;
+  }
+  app.lookup = 'idle';
+  if (app.state.settings.location !== 'on') return; // switched off while the lookup ran: the server stored nothing
+  app.state.myLocation = place;
+  app.cards.delete(place.id);
+  syncSettingsControls();
+  renderCards();
+  void loadCardWeather(true);
+  // Show it when the user has nothing of their own yet (first start), or when it is already on screen
+  // (it may have moved). Not if they picked something else while the lookup ran.
+  if (app.request !== started) return;
+  if (!app.state.lastPlace && app.state.favorites.length === 0) await selectPlace(place, false);
+  else if (app.shown?.id === LOCATION_PLACE_ID) await selectPlace(place, false, { silent: true });
+}
+
+/** Turning the switch on, or "Use my location" on the card. The setting is saved first: the server checks it. */
+async function enableLocation(): Promise<void> {
+  if (app.state.settings.location === 'on') return;
+  const before = app.state.settings.location;
+  app.state.settings.location = 'on';
+  app.lookup = 'idle';
+  syncSettingsControls();
+  renderCards();
+  try {
+    await api.saveSettings({ location: 'on' });
+  } catch (err) {
+    app.state.settings.location = before;
+    syncSettingsControls();
+    renderCards();
+    showBanner((err as Error).message);
+    return;
+  }
+  await findMyLocation();
+}
+
+/** "Not now" and the switch turned off: remember the answer and forget the place (the server deletes it too). */
+async function disableLocation(): Promise<void> {
+  if (app.state.settings.location === 'off') return;
+  const wasShown = app.shown?.id === LOCATION_PLACE_ID || app.place?.id === LOCATION_PLACE_ID;
+  app.state.settings.location = 'off';
+  app.state.myLocation = null;
+  app.cards.delete(LOCATION_PLACE_ID);
+  app.lookup = 'idle';
+  syncSettingsControls();
+  renderCards();
+  try {
+    await api.saveSettings({ location: 'off' });
+  } catch (err) {
+    showBanner((err as Error).message);
+  }
+  // The screen was showing the detected place: go to a city of the user's own, or the default.
+  if (wasShown) await selectPlace(app.state.lastPlace ?? app.state.favorites[0] ?? DEFAULT_PLACE, false);
+}
+
 // ---------- boot ----------
 
 async function boot(): Promise<void> {
@@ -331,9 +436,14 @@ async function boot(): Promise<void> {
     setWindUnit: (u) => void setWindUnit(u),
     setTimeFormat,
     setTempLabels,
+    setLocation: (on) => void (on ? enableLocation() : disableLocation()),
+    locationStatus: () => locationStatus(app.state.settings.location, app.state.myLocation, app.lookup),
     now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
   });
   $('#refresh').addEventListener('click', () => void refresh());
+  $('#location-consent-text').textContent = LOCATION_PRIVACY_LINE;
+  $('#location-allow').addEventListener('click', () => void enableLocation());
+  $('#location-decline').addEventListener('click', () => void disableLocation());
   setupUpdateReady({ timeFormat: () => app.state.settings.timeFormat });
 
   document.addEventListener('keydown', (e) => {
@@ -369,8 +479,11 @@ async function boot(): Promise<void> {
   }
   renderUnits();
   renderCards();
-  await selectPlace(app.state.lastPlace ?? app.state.favorites[0] ?? DEFAULT_PLACE, false);
+  const mine = app.state.settings.location === 'on' ? app.state.myLocation : null;
+  await selectPlace(app.state.lastPlace ?? app.state.favorites[0] ?? mine ?? DEFAULT_PLACE, false);
   void loadCardWeather();
+  // Allowed before: look again at every start (the saved place shows meanwhile, so a failure costs nothing).
+  void findMyLocation();
 }
 
 void boot();

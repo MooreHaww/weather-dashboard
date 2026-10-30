@@ -4,7 +4,16 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { TEMP_LABELS, TIME_FORMATS, WIND_UNITS, type AppState, type Place, type Settings } from '../shared/types';
+import {
+  LOCATION_PLACE_ID,
+  LOCATION_SETTINGS,
+  TEMP_LABELS,
+  TIME_FORMATS,
+  WIND_UNITS,
+  type AppState,
+  type Place,
+  type Settings,
+} from '../shared/types';
 
 export const MAX_RECENT = 10;
 export const MAX_FAVORITES = 50;
@@ -15,11 +24,11 @@ interface StoredFile extends AppState {
 }
 
 export function defaultSettings(): Settings {
-  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' };
+  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask' };
 }
 
 export function defaultState(): AppState {
-  return { favorites: [], recent: [], settings: defaultSettings(), lastPlace: null };
+  return { favorites: [], recent: [], settings: defaultSettings(), lastPlace: null, myLocation: null };
 }
 
 /** Keep only valid settings values from untrusted input (a request patch or an older file). */
@@ -30,6 +39,7 @@ export function validSettings(raw: unknown): Partial<Settings> {
   if (TIME_FORMATS.includes(o.timeFormat as never)) out.timeFormat = o.timeFormat as Settings['timeFormat'];
   if (WIND_UNITS.includes(o.windUnit as never)) out.windUnit = o.windUnit as Settings['windUnit'];
   if (TEMP_LABELS.includes(o.tempLabels as never)) out.tempLabels = o.tempLabels as Settings['tempLabels'];
+  if (LOCATION_SETTINGS.includes(o.location as never)) out.location = o.location as Settings['location'];
   return out;
 }
 
@@ -63,11 +73,15 @@ function sanitize(raw: unknown): AppState {
   const o = raw as Record<string, unknown>;
   const places = (x: unknown, max: number) =>
     (Array.isArray(x) ? x : []).map(toPlace).filter((p): p is Place => p !== null).slice(0, max);
+  const settings = { ...defaultSettings(), ...validSettings(o.settings) };
+  const myLocation = toPlace(o.myLocation);
   return {
     favorites: places(o.favorites, MAX_FAVORITES),
     recent: places(o.recent, MAX_RECENT),
-    settings: { ...defaultSettings(), ...validSettings(o.settings) },
+    settings,
     lastPlace: toPlace(o.lastPlace),
+    // Only a place found by the lookup, and only while the user allows it.
+    myLocation: settings.location === 'on' && myLocation?.id === LOCATION_PLACE_ID ? myLocation : null,
   };
 }
 
@@ -138,6 +152,7 @@ export class Storage {
 
   addFavorite(place: Place) {
     return this.update((s) => {
+      if (place.id === LOCATION_PLACE_ID) return; // the detected place is not a favorite
       if (s.favorites.some((f) => f.id === place.id)) return;
       s.favorites.push(place);
       s.favorites = s.favorites.slice(0, MAX_FAVORITES);
@@ -153,6 +168,7 @@ export class Storage {
   /** Record a viewed city: move it to the front of recent and remember it for next launch. */
   addRecent(place: Place) {
     return this.update((s) => {
+      if (place.id === LOCATION_PLACE_ID) return; // not a recent search, and not the next launch's city
       s.recent = [place, ...s.recent.filter((r) => r.id !== place.id)].slice(0, MAX_RECENT);
       s.lastPlace = place;
     });
@@ -167,6 +183,22 @@ export class Storage {
   updateSettings(patch: unknown) {
     return this.update((s) => {
       Object.assign(s.settings, validSettings(patch));
+      // Turning the setting off (or back to "ask") deletes what the lookup found.
+      if (s.settings.location !== 'on') s.myLocation = null;
     });
+  }
+
+  /**
+   * Store the place the lookup found. Checked again here, inside the update: if the user turned the
+   * setting off while the lookup ran, nothing is stored and this returns null.
+   */
+  async setMyLocation(place: Place): Promise<AppState | null> {
+    let stored = false;
+    const state = await this.update((s) => {
+      if (s.settings.location !== 'on' || place.id !== LOCATION_PLACE_ID) return;
+      s.myLocation = place;
+      stored = true;
+    });
+    return stored ? state : null;
   }
 }

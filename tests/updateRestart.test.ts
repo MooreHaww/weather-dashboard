@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { createRestartHandler, RESTART_CHANNEL, type Frame, type RestartEvent } from '../src/main/updateRestart';
+import { CHECK_CHANNEL } from '../src/main/updateCheck';
 
 const ORIGIN = 'http://127.0.0.1:51234';
 
@@ -86,9 +87,9 @@ describe('the "Update now" message in the main process', () => {
     expect(saveWindowState).toHaveBeenCalledTimes(1);
   });
 
-  it('the preload sends exactly this one message, with no arguments', () => {
+  it('the preload sends the restart message with no arguments (v1.5 added one more message, "update-check", which has its own test)', () => {
     const preload = readFileSync(path.join(__dirname, '..', 'src', 'main', 'preload.ts'), 'utf8');
     const sends = [...preload.matchAll(/ipcRenderer\.(send|sendSync|invoke|postMessage)\(([^)]*)\)/g)].map((m) => m[0]);
-    expect(sends).toEqual([`ipcRenderer.send('${RESTART_CHANNEL}')`]);
+    expect(sends).toEqual([`ipcRenderer.send('${RESTART_CHANNEL}')`, `ipcRenderer.send('${CHECK_CHANNEL}')`]);
   });
 });

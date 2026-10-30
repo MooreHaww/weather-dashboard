@@ -1,7 +1,8 @@
 // Preload (sandboxed): the window's only link to the main process. It can listen for
 // "an update is ready" and for the update state shown in Settings (receive-only: the page
-// can display the state, never set it), and send one message back, "restart and install it",
-// which carries nothing (the main process checks it, see updateRestart.ts).
+// can display the state, never set it), and send two messages back, "restart and install it"
+// and "check for updates", which carry nothing (the main process checks both, see
+// updateRestart.ts and updateCheck.ts).
 
 import { contextBridge, ipcRenderer } from 'electron';
 
@@ -19,5 +20,9 @@ contextBridge.exposeInMainWorld('updates', {
   /** Takes no arguments and passes none on, whatever the page calls it with. */
   restart(): void {
     ipcRenderer.send('update-restart'); // RESTART_CHANNEL (a sandboxed preload can't import it)
+  },
+  /** Takes no arguments and passes none on. The main process decides whether a check happens. */
+  checkNow(): void {
+    ipcRenderer.send('update-check'); // CHECK_CHANNEL (updateCheck.ts)
   },
 });

@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.4.7-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.5.0-orange?style=for-the-badge)
 
 | ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -49,6 +49,8 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **Update now (v1.4.6):** when an update is ready, the gear shows a red dot and Settings has an **Update now** button. After you confirm, the app closes, updates and opens again.
 - **v1.4.5:** remembers the window's size, position and maximized state; `F5` or `Ctrl+R` refreshes.
 - **Updates in Settings (v1.4.7):** the **Updates** section always shows the app version and where updating stands: up to date (and when it was last checked), downloading, or ready with the **Update now** button.
+- **Your location (v1.5):** the first time, a card asks whether the app may guess your city from your IP address. Nothing is looked up until you say yes. If you do, **Your location** stays on top of the sidebar (it is not a favorite and not a recent search) and, on a first start, it is the city shown. **Not now** is remembered, and the switch in Settings changes either answer.
+- **Check for updates (v1.5):** a button in the Updates section of Settings, for when you do not want to wait for the automatic check.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -83,9 +85,9 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (218 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (171 tests, needs internet) |
-| `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (7 tests) |
+| `npm test` | Unit and API tests (298 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (185 tests, needs internet) |
+| `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (11 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -118,12 +120,13 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 
 | Section | Options |
 |---|---|
-| **Updates** | Always first. The installed version and the state: "Version 1.4.7 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date" |
+| **Updates** | Always first. The installed version and the state: "Version 1.5.0 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 | **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
+| **Location** | **Use my location** switch. It is off until you answer the card in the sidebar. On: the app asks GeoJS for your city (by IP address, at each start) and says "Near Paris, France. This is approximate."; if it cannot, "Couldn't find your location. It tries again the next time the app starts." Off: no lookup is made and the stored place is deleted. The section says what is sent: "Uses your IP address to guess your city. The IP address is sent to GeoJS." |
 
-Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -133,11 +136,12 @@ Electron main process
  │    ├─ /api/geocode   → Open-Meteo geocoding   (cached 24 h)
  │    ├─ /api/weather   → Open-Meteo forecast    (cached 10 min)
  │    ├─ /api/state, /api/favorites, /api/recent, /api/settings
+ │    ├─ /api/location  → GeoJS, only after you allowed it (one request, no retry)
  │    ├─ /api/stats     → cache hit rate and response times
  │    └─ the built UI
  ├─ the window loads http://127.0.0.1:<port>
  └─ electron-updater checks GitHub Releases (installed app only)
-      └─ preload: "update ready" and the update state to the page, "Update now" back (the page's only message)
+      └─ preload: "update ready" and the update state to the page; "Update now" and "Check for updates" back (the page's only two messages)
 ```
 
 | Folder | Purpose |
@@ -152,14 +156,15 @@ Electron main process
 **Key decisions**
 
 - **Local JSON file, not MongoDB Atlas.** A cloud database needs a connection string, and anyone can unpack an Electron app and read it. It would also send each user's private data to a shared database and need internet just to show favorites. A local file needs no account, works offline and uninstalls cleanly. Writes are atomic, so a crash cannot leave a half-written file.
-- **Security.** The window runs sandboxed with context isolation and no Node access. A strict Content Security Policy blocks outside scripts. The server only answers requests addressed to `127.0.0.1` or `localhost` (this blocks DNS-rebinding attacks). All API text is HTML-escaped. The page can send one message to the main process ("Update now", with no arguments); it is ignored unless an update has been downloaded and it comes from the app's own window and top frame, loaded from the local server.
+- **Security.** The window runs sandboxed with context isolation and no Node access. A strict Content Security Policy blocks outside scripts. The server only answers requests addressed to `127.0.0.1` or `localhost` (this blocks DNS-rebinding attacks). All API text is HTML-escaped. The page can send two messages to the main process, both with no arguments. "Update now" is ignored unless an update has been downloaded; "Check for updates" is ignored in a build that does not update itself, while an update is downloading or ready, while a check runs, and within 30 seconds of the last one. Both are ignored unless they come from the app's own window and top frame, loaded from the local server.
+- **Location by IP, in the server, behind a switch.** The lookup runs in the local Express server, not in the page, so the page's Content Security Policy did not change. The server refuses it unless the saved setting says you allowed it (the page cannot skip that), makes one plain request (no cookies, no identifiers, a generic `User-Agent`, 5 seconds, no retry, no redirects), keeps only the city, country, coordinates rounded to about 1 km and the timezone from the answer after checking each, and never stores or logs the IP address. The detected place has its own id (-1) so it can never end up in favorites, recent cities or the next start's city.
 - **Cache.** Coordinates are rounded to about 1 km so the same city always reuses one entry, and two identical simultaneous requests share one call to Open-Meteo.
 
 **How it is tested**
 
-- **Unit and API tests** (Vitest) run offline: cache, storage, time and rain helpers, settings, auto-update scheduling, the update state shown in Settings and the "Update now" checks in the main process.
+- **Unit and API tests** (Vitest) run offline: cache, storage, time and rain helpers, settings, auto-update scheduling, the update state shown in Settings, the "Update now" and "Check for updates" checks in the main process, and the location lookup (what is sent, what is kept, what is refused).
 - **End-to-end tests** start the real built app in its own Electron window, with its own profile and a throwaway data folder, and drive it over the Chrome DevTools Protocol with real clicks and key presses. They resize the real window and measure the layout: no overlapping cards, the stat dividers every 50 px from 480 to 1400 px, the hourly strip's spacing, the current-time dot's position. They count the pixels each chart painted and fail on any page error. Animations stay on.
-- **The update test** builds the installer, runs the packaged app and points its updater at a local fake feed (a `latest.yml` and a fake installer). It checks the Updates section in each state (before the first check, up to date, downloading, ready, and a feed that returns 503), the download, the note, the red dot, "Update now" and the restart path. The fake installer never runs.
+- **The update test** builds the installer, runs the packaged app and points its updater at a local fake feed (a `latest.yml` and a fake installer). It checks the Updates section in each state (before the first check, up to date, downloading, ready, and a feed that returns 503), the download, the note, the red dot, "Update now", the restart path and the "Check for updates" button ("Checking…", the result, a second press ignored). The location tests start the app with GeoJS replaced by a fake that counts requests, so the real service is never contacted. The fake installer never runs.
 
 **Releases and auto-update**
 
@@ -185,15 +190,18 @@ Electron main process
 ## Privacy
 
 - No account, no sign-in, no analytics.
-- Favorites, recent cities and settings are saved in `%APPDATA%\Weather Dashboard\weather-dashboard.json`, and the window size and position in `window-state.json` next to it. Uninstalling keeps them; you can delete the folder.
-- The app connects to two services:
+- Favorites, recent cities, settings and (if you allowed it) the place found by the location lookup are saved in `%APPDATA%\Weather Dashboard\weather-dashboard.json`, and the window size and position in `window-state.json` next to it. Uninstalling keeps them; you can delete the folder.
+- The app connects to up to three services:
   - **Open-Meteo**, for the forecast (the coordinates of the city on screen and of your favorite and recent cities) and for city search (what you type in the search box);
-  - **GitHub**, to check this repository's releases for updates and download them (installed app only).
+  - **GitHub**, to check this repository's releases for updates and download them (installed app only);
+  - **GeoJS**, only after you answer "Use my location" with yes and while the switch is on: one request at each start to `https://get.geojs.io/v1/ip/geo.json`. GeoJS sees your IP address, as any website does; the request carries no cookies and no identifiers, and its `User-Agent` is just `Weather-Dashboard`. Only the city, country, coordinates rounded to about 1 km and timezone from the answer are kept. The IP address is never stored or logged, and turning the switch off deletes the stored place.
 - The window itself can only talk to the app's own local server. Links you click open in your browser.
 
 ## Data and credits
 
 Weather data by [Open-Meteo.com](https://open-meteo.com/), under [CC BY 4.0](https://open-meteo.com/en/licence). Open-Meteo's licence asks for a link next to wherever its data is shown (the app's footer has one), a link to the licence (the footer has that too), and a note if changes were made. Its [terms](https://open-meteo.com/en/terms) allow the free API "only for non-commercial purposes", for example "Private or non-profit websites or apps that do not have subscriptions or advertising", with fewer than 10,000 calls per day, 5,000 per hour and 600 per minute.
+
+IP-based location (only if you allow it) by [GeoJS](https://www.geojs.io/).
 
 Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](https://www.electronjs.org/) (MIT).
 
@@ -201,6 +209,7 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 
 - **Unsigned installer:** Windows SmartScreen warns on install (**More info**, then **Run anyway**).
 - **Windows only:** there is only a Windows installer.
+- **Location by IP is approximate:** it can be a city away, or the place of your provider or VPN. "Your location" has no star, because it is looked up again at each start instead of being saved as a favorite.
 - **Daylight-saving hour labels:** in the week before a clock change, the hours after the change are labelled one hour off (see [Code review (v1.4.5)](#code-review-v145)).
 
 ## 🗺️ Roadmap
@@ -273,11 +282,12 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - [x] The version in package-lock.json now matches the app (it said 1.3.0) (1.4.7)
 
 ### v1.5 - Location
-- [ ] Auto-detect my location on first launch
-- [ ] Add (your location) and it stays on top
-- [ ] A button in Settings to check for updates
+- [x] Auto-detect my location on first launch
+- [x] Add (your location) and it stays on top
+- [x] A button in Settings to check for updates
 
 #### v1.5 (Fixes)
+- [x] The update state is now sent to the window as soon as it loads (until the first change it was skipped, so Settings could not tell "no check yet" from "no news")
 
 ### v1.6 - Liquid glass look
 - [ ] Make the full background 100% liquid glass with blur, and anything that needs a box gets extra blur behind it

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { createApp } from '../server/app';
 import { createLogger } from '../server/logger';
 import { startAutoUpdate, type Updater } from './autoUpdate';
+import { CHECK_CHANNEL, createCheckHandler } from './updateCheck';
 import { createRestartHandler, RESTART_CHANNEL } from './updateRestart';
 import { createUpdateTracker, type UpdateTracker } from './updateTracker';
 import { loadWindowState, restoreBounds, saveWindowState } from './windowState';
@@ -85,8 +86,8 @@ function createWindow(url: string): void {
   });
 
   win.webContents.on('did-finish-load', () => {
-    sendUpdateState();
-    sendUpdateReady();
+    sendUpdateState(true);
+    sendUpdateReady(true);
   });
   win.once('ready-to-show', () => {
     if (bounds.maximized) win?.maximize();
@@ -97,14 +98,17 @@ function createWindow(url: string): void {
   void win.loadURL(devUrl ?? url);
 }
 
-/** Tell the page an update is ready (again after a reload, so it is never lost). */
-function sendUpdateReady(): void {
-  if (updateReady && win && !win.webContents.isLoading()) win.webContents.send('update-ready', updateReady);
+/**
+ * Tell the page an update is ready (again after a reload, so it is never lost).
+ * `loaded`: called from did-finish-load, where isLoading() is still true although the page's scripts have run.
+ */
+function sendUpdateReady(loaded = false): void {
+  if (updateReady && win && (loaded || !win.webContents.isLoading())) win.webContents.send('update-ready', updateReady);
 }
 
-/** Tell the page the update state for Settings (the page only displays it; also sent again after a reload). */
-function sendUpdateState(): void {
-  if (tracker && win && !win.webContents.isLoading()) win.webContents.send('update-state', tracker.state());
+/** Tell the page the update state for Settings (the page only displays it; also sent again after a reload). `loaded`: see sendUpdateReady. */
+function sendUpdateState(loaded = false): void {
+  if (tracker && win && (loaded || !win.webContents.isLoading())) win.webContents.send('update-state', tracker.state());
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -120,7 +124,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     // Updates come from GitHub Releases (see electron-builder.yml `publish`), only in the installed app.
     const updatesEnabled = app.isPackaged && !devUrl;
-    const updateTracker = createUpdateTracker({ version: app.getVersion(), enabled: updatesEnabled, onChange: sendUpdateState });
+    const updateTracker = createUpdateTracker({ version: app.getVersion(), enabled: updatesEnabled, onChange: () => sendUpdateState() });
     tracker = updateTracker;
     // The dashboard needs no camera, location, notifications, etc.
     session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
@@ -145,7 +149,7 @@ if (!app.requestSingleInstanceLock()) {
       },
       log,
     });
-    // "Update now" in Settings: the only message the page can send (no arguments; checked in updateRestart.ts).
+    // "Update now" in Settings: no arguments; checked in updateRestart.ts.
     ipcMain.on(
       RESTART_CHANNEL,
       createRestartHandler({
@@ -154,6 +158,18 @@ if (!app.requestSingleInstanceLock()) {
         updateReady: () => updateReady,
         updater: updates.updater,
         saveWindowState: saveWindow,
+        log,
+      }),
+    );
+    // "Check for updates" in Settings: the page's second message (no arguments; checked in updateCheck.ts).
+    ipcMain.on(
+      CHECK_CHANNEL,
+      createCheckHandler({
+        window: () => win,
+        origin: new URL(url).origin,
+        active: () => updatesEnabled,
+        status: () => updateTracker.state().status,
+        check: updates.checkNow,
         log,
       }),
     );

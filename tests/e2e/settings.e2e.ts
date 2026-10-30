@@ -99,6 +99,7 @@ describe('settings panel', () => {
       'Units',
       'Time format',
       'Temperature chart',
+      'Location',
     ]);
     expect(await checkedOptions()).toEqual(['metric', 'kmh', '12h', '3h']);
   });

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "favorites": [
+    {
+      "id": 2988507,
+      "name": "Paris",
+      "latitude": 48.85341,
+      "longitude": 2.3488,
+      "admin1": "Île-de-France",
+      "country": "France",
+      "countryCode": "FR",
+      "timezone": "Europe/Paris"
+    },
+    {
+      "id": 1850147,
+      "name": "Tokyo",
+      "latitude": 35.6895,
+      "longitude": 139.69171,
+      "admin1": "Tokyo",
+      "country": "Japan",
+      "countryCode": "JP",
+      "timezone": "Asia/Tokyo"
+    }
+  ],
+  "recent": [
+    {
+      "id": 5128581,
+      "name": "New York",
+      "latitude": 40.71427,
+      "longitude": -74.00597,
+      "admin1": "New York",
+      "country": "United States",
+      "countryCode": "US",
+      "timezone": "America/New_York"
+    }
+  ],
+  "settings": {
+    "units": "imperial",
+    "timeFormat": "24h",
+    "windUnit": "mph",
+    "tempLabels": "2h"
+  },
+  "lastPlace": {
+    "id": 5128581,
+    "name": "New York",
+    "latitude": 40.71427,
+    "longitude": -74.00597,
+    "admin1": "New York",
+    "country": "United States",
+    "countryCode": "US",
+    "timezone": "America/New_York"
+  }
+}

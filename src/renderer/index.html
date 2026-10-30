@@ -42,6 +42,21 @@
 
     <div class="layout">
       <aside class="sidebar" aria-label="Saved cities">
+        <!-- Asked once, until the user answers (settings.location 'ask'). Nothing is looked up before "Use my location". -->
+        <section id="location-consent" class="location-consent" aria-labelledby="location-consent-title" hidden>
+          <h2 class="location-consent-title" id="location-consent-title">Show weather where you are?</h2>
+          <p class="location-consent-text" id="location-consent-text"></p>
+          <p class="location-consent-text">You can change this in Settings.</p>
+          <div class="location-consent-actions">
+            <button type="button" class="button button-primary" id="location-allow">Use my location</button>
+            <button type="button" class="button" id="location-decline">Not now</button>
+          </div>
+        </section>
+        <section id="location-section" aria-labelledby="location-title" hidden>
+          <h2 class="section-title" id="location-title">Your location</h2>
+          <ul id="location-list" class="fav-list"></ul>
+          <p id="location-note" class="muted small" hidden></p>
+        </section>
         <section>
           <h2 class="section-title">Favorites</h2>
           <ul id="favorites" class="fav-list"></ul>

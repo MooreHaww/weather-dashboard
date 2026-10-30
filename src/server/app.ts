@@ -4,6 +4,7 @@ import { TtlCache } from './cache';
 import { HttpError } from './errors';
 import { Metrics } from './metrics';
 import { UpstreamError, type FetchLike } from './openMeteo';
+import { locationRoutes } from './routes/location';
 import { stateRoutes } from './routes/state';
 import { weatherRoutes } from './routes/weather';
 import { Storage } from './storage';
@@ -73,6 +74,7 @@ export function createApp(opts: AppOptions) {
   });
   api.use(weatherRoutes({ fetchImpl, weatherCache, geocodeCache, metrics }));
   api.use(stateRoutes(storage));
+  api.use(locationRoutes({ storage, fetchImpl, log }));
   api.get('/stats', (_req, res) => {
     const w = weatherCache.stats();
     const g = geocodeCache.stats();

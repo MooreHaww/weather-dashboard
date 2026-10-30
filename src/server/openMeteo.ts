@@ -5,7 +5,10 @@ import { WIND_LABELS, type Place, type Units, type WeatherData, type WindUnit } 
 export const GEOCODING_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 export const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 
-export type FetchLike = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
+export type FetchLike = (
+  url: string,
+  init?: { signal?: AbortSignal; headers?: Record<string, string>; redirect?: 'error'; credentials?: 'omit' },
+) => Promise<Response>;
 
 export class UpstreamError extends Error {
   constructor(

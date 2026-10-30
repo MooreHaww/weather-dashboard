@@ -1,6 +1,6 @@
 import { rainSummary } from '../../shared/rain';
 import { cityClock, compass, formatHour } from '../../shared/time';
-import type { Place, TimeFormat, WeatherData } from '../../shared/types';
+import { LOCATION_PLACE_ID, type Place, type TimeFormat, type WeatherData } from '../../shared/types';
 import { describeWeather } from '../../shared/weatherCodes';
 import { esc, round } from '../dom';
 import { glyphs, weatherIcon, windArrow } from '../icons';
@@ -41,8 +41,12 @@ export function renderHero(
     <div class="hero-place">
       <div class="place-row">
         <h1 class="place-name">${esc(place.name)}</h1>
-        <button type="button" class="star" id="star" aria-pressed="${isFavorite}"
-          title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${glyphs.star}</button>
+        ${
+          place.id === LOCATION_PLACE_ID
+            ? '' // the detected place is not a favorite (it is always listed under "Your location")
+            : `<button type="button" class="star" id="star" aria-pressed="${isFavorite}"
+          title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${glyphs.star}</button>`
+        }
       </div>
       <p class="muted">${esc(placeSubtitle(place)) || '&nbsp;'}</p>
       <div class="clock" aria-live="off">

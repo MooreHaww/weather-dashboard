@@ -18,7 +18,7 @@ let places = new Map<number, Place>();
 
 /** Wire up click and keyboard handling once; renders only replace the list contents. */
 export function setupSidebar(h: Handlers): void {
-  for (const list of [$('#favorites'), $('#recent')]) {
+  for (const list of [$('#location-list'), $('#favorites'), $('#recent')]) {
     list.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       const card = target.closest<HTMLElement>('.place-card[data-id]');
@@ -53,7 +53,7 @@ function weatherBadge(w: CardWeather | undefined): string {
   return `${weatherIcon(info.icon, w.isDay, 'wx-icon fav-icon')}<span>${round(w.temperature)}°</span>`;
 }
 
-function card(p: Place, kind: 'fav' | 'recent', activeId: number | null, weather: CardWeather | undefined): string {
+function card(p: Place, kind: 'loc' | 'fav' | 'recent', activeId: number | null, weather: CardWeather | undefined): string {
   const active = p.id === activeId;
   const label = [p.name, p.admin1, p.country].filter(Boolean).join(', ');
   return `
@@ -74,13 +74,26 @@ function card(p: Place, kind: 'fav' | 'recent', activeId: number | null, weather
     </li>`;
 }
 
+/** "Your location": the detected place, or the line saying why there is none yet. `null` hides the section (the setting is not on). */
+export interface LocationEntry {
+  place: Place | null;
+  note: string;
+}
+
 export function renderSidebar(
   favorites: Place[],
   recent: Place[],
   activeId: number | null,
   weather: Map<number, CardWeather>,
+  location: LocationEntry | null = null,
 ): void {
-  places = new Map([...favorites, ...recent].map((p) => [p.id, p]));
+  places = new Map([...(location?.place ? [location.place] : []), ...favorites, ...recent].map((p) => [p.id, p]));
+
+  $('#location-section').hidden = !location;
+  $('#location-list').innerHTML = location?.place ? card(location.place, 'loc', activeId, weather.get(location.place.id)) : '';
+  const note = $('#location-note');
+  note.hidden = !location || location.place !== null;
+  note.textContent = location && !location.place ? location.note : '';
 
   $('#favorites').innerHTML = favorites.map((p) => card(p, 'fav', activeId, weather.get(p.id))).join('');
   $('#favorites-empty').hidden = favorites.length > 0;

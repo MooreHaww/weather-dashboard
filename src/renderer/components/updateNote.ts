@@ -9,6 +9,8 @@
 // - an "Update now" button in the Updates section. It asks to confirm, then sends the
 //   page's only message to the main process, which restarts into the new version
 //   (src/main/updateRestart.ts). Without it, the update still installs on close.
+// - A "Check for updates" button (idle, up to date or failed): its message carries nothing, the main
+//   process decides whether to check (src/main/updateCheck.ts) and the state it sends back shows "Checking…".
 // Missing in dev:server (plain browser): the section shows only the version, nothing else happens.
 
 import { $, esc } from '../dom';
@@ -19,7 +21,12 @@ import { onSettingsSync, settingsRow, settingsSection } from './settings';
 
 declare global {
   interface Window {
-    updates?: { onReady(callback: (version: string) => void): void; onState(callback: (state: unknown) => void): void; restart(): void };
+    updates?: {
+      onReady(callback: (version: string) => void): void;
+      onState(callback: (state: unknown) => void): void;
+      restart(): void;
+      checkNow(): void;
+    };
   }
 }
 
@@ -57,6 +64,15 @@ export function setupUpdateReady(opts: { timeFormat?: () => TimeFormat } = {}): 
   button.id = 'update-now';
   button.textContent = 'Update now';
   button.addEventListener('click', () => confirmRestart(button));
+  const checkButton = document.createElement('button');
+  checkButton.type = 'button';
+  checkButton.className = 'button';
+  checkButton.id = 'update-check';
+  // aria-disabled, not disabled: the button keeps keyboard focus while it says "Checking…".
+  checkButton.addEventListener('click', () => {
+    if (checkButton.getAttribute('aria-disabled') === 'true') return;
+    window.updates?.checkNow();
+  });
 
   let state: UpdateState | null = null;
   let painted = '';
@@ -65,7 +81,20 @@ export function setupUpdateReady(opts: { timeFormat?: () => TimeFormat } = {}): 
     const key = JSON.stringify(text);
     if (key === painted) return; // the minute tick must not rebuild the row (the button may have focus)
     painted = key;
-    const row = settingsRow({ label: text.label, description: text.detail ?? undefined, control: text.ready ? button : undefined });
+    const checking = text.check === 'checking';
+    checkButton.textContent = checking ? 'Checking…' : 'Check for updates';
+    checkButton.setAttribute('aria-disabled', String(checking));
+    const focused = document.activeElement === checkButton; // the row is rebuilt: give focus back
+    const control = text.ready ? button : text.check === 'none' ? undefined : checkButton;
+    const row = settingsRow({ label: text.label, description: text.detail ?? undefined, control });
+    if (control === checkButton) {
+      // Same as below: keep the button's own name, and read the state as its description.
+      const label = row.querySelector('label')!;
+      label.removeAttribute('for');
+      label.id = 'update-state-label';
+      const desc = row.querySelector('.settings-row-description');
+      checkButton.setAttribute('aria-describedby', desc ? `${label.id} ${desc.id}` : label.id);
+    }
     if (text.ready) {
       // A <label for> would rename the button to the label's text. Keep "Update now" as its
       // name and the version as its description (and clicking the text does nothing).
@@ -76,7 +105,9 @@ export function setupUpdateReady(opts: { timeFormat?: () => TimeFormat } = {}): 
       button.setAttribute('aria-describedby', desc ? `${label.id} ${desc.id}` : label.id);
     }
     body.replaceChildren(row);
+    if (focused) checkButton.focus();
   }
+  body.setAttribute('aria-live', 'polite'); // "Up to date", "Couldn't check" and so on are read out
   paint();
   onSettingsSync(paint); // "checked 10:42" follows the 12/24-hour setting
 

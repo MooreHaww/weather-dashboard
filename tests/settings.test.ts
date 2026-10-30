@@ -23,11 +23,12 @@ function toggle(): HTMLInputElement {
 }
 
 describe('settings helpers', () => {
-  it('ships the Units, Time format and Temperature chart sections, and nothing else yet', () => {
+  it('ships the Units, Time format, Temperature chart and Location sections, and nothing else yet', () => {
     expect(SETTINGS_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['units', 'Units'],
       ['time-format', 'Time format'],
       ['temperature-chart', 'Temperature chart'],
+      ['location', 'Location'],
     ]);
   });
 
@@ -98,7 +99,7 @@ describe('settings helpers', () => {
 });
 
 describe('the real sections', () => {
-  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h' };
+  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask' };
   let nowLocal = '2026-10-17T16:05:30';
   const bindings: SettingsBindings = {
     get: () => settings,
@@ -106,6 +107,8 @@ describe('the real sections', () => {
     setWindUnit: vi.fn((u) => void (settings.windUnit = u)),
     setTimeFormat: vi.fn((f) => void (settings.timeFormat = f)),
     setTempLabels: vi.fn((l) => void (settings.tempLabels = l)),
+    setLocation: vi.fn((on) => void (settings.location = on ? 'on' : 'off')),
+    locationStatus: () => `status:${settings.location}`,
     now: () => nowLocal,
   };
 
@@ -122,7 +125,7 @@ describe('the real sections', () => {
 
   it('renders radio groups with the current values checked', () => {
     const root = mount();
-    expect([...root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Units', 'Time format', 'Temperature chart']);
+    expect([...root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Units', 'Time format', 'Temperature chart', 'Location']);
     expect(root.querySelectorAll('[role="radiogroup"]')).toHaveLength(4);
     expect(checked(root, 0)).toEqual(['°C']);
     expect(checked(root, 1)).toEqual(['km/h']);
@@ -164,7 +167,7 @@ describe('the real sections', () => {
   it('has no version line of its own any more (the version lives in the Updates section)', () => {
     const root = mount();
     expect(root.querySelector('#settings-version')).toBeNull();
-    expect(root.lastElementChild!.id).toBe('settings-temperature-chart');
+    expect(root.lastElementChild!.id).toBe('settings-location');
   });
 
   it('a row can be plain information, with no control', () => {

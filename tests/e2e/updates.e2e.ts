@@ -114,6 +114,7 @@ describe('before an update is ready', () => {
       'Units',
       'Time format',
       'Temperature chart',
+      'Location',
     ]);
     const appVersion = await app.evaluateMain<string>(`return process.mainModule.require('electron').app.getVersion();`);
     expect(await page.evaluate<string>(`document.querySelector('#settings-updates .settings-row-label').textContent`)).toBe(`Version ${appVersion}`);
@@ -122,8 +123,8 @@ describe('before an update is ready', () => {
     await closeSettings();
   });
 
-  it('the page can only listen and ask for a restart; it has no other way to reach the main process', async () => {
-    expect(await page.evaluate<string[]>(`Object.keys(window.updates).sort()`)).toEqual(['onReady', 'onState', 'restart']);
+  it('the page can only listen, ask for a restart and ask for a check; it has no other way to reach the main process', async () => {
+    expect(await page.evaluate<string[]>(`Object.keys(window.updates).sort()`)).toEqual(['checkNow', 'onReady', 'onState', 'restart']);
     expect(await page.evaluate<string>(`typeof window.require + ' ' + typeof window.ipcRenderer + ' ' + typeof window.process`)).toBe(
       'undefined undefined undefined',
     );
@@ -198,9 +199,10 @@ describe('when an update is ready (message simulated, no update in the main proc
       'Units',
       'Time format',
       'Temperature chart',
+      'Location',
     ]);
     expect(await page.evaluate<string>(`document.querySelector('#settings-updates .settings-row-label').textContent`)).toBe('Version 9.9.9 is ready');
-    expect(await page.evaluate<string>(`document.getElementById('settings-sections').lastElementChild.id`)).toBe('settings-temperature-chart');
+    expect(await page.evaluate<string>(`document.getElementById('settings-sections').lastElementChild.id`)).toBe('settings-location');
   });
 
   it('the title bar still has no overlaps with the dot, at 480 and 1400 px', async () => {

@@ -5,13 +5,13 @@ const at = (h: number, m: number) => new Date(2026, 9, 25, h, m, 5).getTime(); /
 
 describe('describeUpdate', () => {
   it('no state yet (plain browser, or before the main process answers): only the version', () => {
-    expect(describeUpdate(null, '1.4.7')).toEqual({ label: 'Version 1.4.7', detail: null, ready: false });
+    expect(describeUpdate(null, '1.4.7')).toEqual({ label: 'Version 1.4.7', detail: null, ready: false, check: 'none' });
   });
 
   it('no check finished yet and dev builds: only the version, nothing extra', () => {
-    for (const status of ['idle', 'unavailable'] as const) {
-      expect(describeUpdate({ status, version: '1.4.7' }, 'x')).toEqual({ label: 'Version 1.4.7', detail: null, ready: false });
-    }
+    // The button only exists where a check is possible: not in a dev or unpackaged build.
+    expect(describeUpdate({ status: 'idle', version: '1.4.7' }, 'x')).toEqual({ label: 'Version 1.4.7', detail: null, ready: false, check: 'idle' });
+    expect(describeUpdate({ status: 'unavailable', version: '1.4.7' }, 'x')).toEqual({ label: 'Version 1.4.7', detail: null, ready: false, check: 'none' });
   });
 
   it('up to date: "Version 1.4.7 · Up to date", with when it was checked in the chosen format', () => {
@@ -33,11 +33,13 @@ describe('describeUpdate', () => {
       label: 'Version 1.4.8 is downloading…',
       detail: 'Installed version 1.4.7',
       ready: false,
+      check: 'none',
     });
     expect(describeUpdate({ status: 'ready', version: '1.4.7', next: '1.4.8' }, 'x')).toEqual({
       label: 'Version 1.4.8 is ready',
       detail: 'Installed version 1.4.7',
       ready: true,
+      check: 'none',
     });
   });
 
@@ -46,6 +48,7 @@ describe('describeUpdate', () => {
       label: 'Version 1.4.7',
       detail: "Couldn't check for updates",
       ready: false,
+      check: 'idle',
     });
   });
 

@@ -7,6 +7,7 @@ import type { TimeFormat } from './types';
 export type UpdateStatus =
   | 'unavailable' // dev or unpackaged build: the updater does not run
   | 'idle' // packaged, but no check has finished yet
+  | 'checking' // "Check for updates" was pressed and the check is running
   | 'up-to-date' // the last check succeeded and found nothing newer
   | 'downloading'
   | 'ready' // downloaded, installs on quit or with "Update now"
@@ -22,7 +23,7 @@ export interface UpdateState {
   checkedAt?: number;
 }
 
-const STATUSES: readonly string[] = ['unavailable', 'idle', 'up-to-date', 'downloading', 'ready', 'failed'];
+const STATUSES: readonly string[] = ['unavailable', 'idle', 'checking', 'up-to-date', 'downloading', 'ready', 'failed'];
 
 /** The page does not trust what arrives: anything that is not a well-formed state is dropped. */
 export function parseUpdateState(value: unknown): UpdateState | null {
@@ -60,24 +61,30 @@ export interface UpdateText {
   detail: string | null;
   /** Whether the "Update now" button belongs in the row. */
   ready: boolean;
+  /** The "Check for updates" button: not shown, shown, or shown as "Checking…" (disabled) while a check runs. */
+  check: 'none' | 'idle' | 'checking';
 }
 
 /** The words for each state. Without a state (plain browser, nothing sent yet) only the version shows. */
 export function describeUpdate(state: UpdateState | null, installed: string, format: TimeFormat = '12h'): UpdateText {
-  if (!state) return { label: `Version ${installed}`, detail: null, ready: false };
+  if (!state) return { label: `Version ${installed}`, detail: null, ready: false, check: 'none' };
   const version = state.version;
   switch (state.status) {
     case 'up-to-date': {
       const base = `Version ${version} · Up to date`;
-      return { label: state.checkedAt === undefined ? base : `${base} · ${checkedText(state.checkedAt, format)}`, detail: null, ready: false };
+      return { label: state.checkedAt === undefined ? base : `${base} · ${checkedText(state.checkedAt, format)}`, detail: null, ready: false, check: 'idle' };
     }
     case 'downloading':
-      return { label: `Version ${state.next} is downloading…`, detail: `Installed version ${version}`, ready: false };
+      return { label: `Version ${state.next} is downloading…`, detail: `Installed version ${version}`, ready: false, check: 'none' };
     case 'ready':
-      return { label: `Version ${state.next} is ready`, detail: `Installed version ${version}`, ready: true };
+      return { label: `Version ${state.next} is ready`, detail: `Installed version ${version}`, ready: true, check: 'none' };
     case 'failed':
-      return { label: `Version ${version}`, detail: "Couldn't check for updates", ready: false };
+      return { label: `Version ${version}`, detail: "Couldn't check for updates", ready: false, check: 'idle' };
+    case 'checking':
+      return { label: `Version ${version}`, detail: null, ready: false, check: 'checking' };
+    case 'idle':
+      return { label: `Version ${version}`, detail: null, ready: false, check: 'idle' };
     default:
-      return { label: `Version ${version}`, detail: null, ready: false };
+      return { label: `Version ${version}`, detail: null, ready: false, check: 'none' };
   }
 }

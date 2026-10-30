@@ -11,6 +11,15 @@ export const WIND_UNITS: readonly WindUnit[] = ['kmh', 'mph', 'ms'];
 export const TEMP_LABELS: readonly TempLabels[] = ['3h', '2h', '1h'];
 export const WIND_LABELS: Record<WindUnit, string> = { kmh: 'km/h', mph: 'mph', ms: 'm/s' };
 
+/**
+ * "Use my location": 'ask' = not answered yet (the page shows the consent card and nothing is looked up),
+ * 'on' = the user allowed a lookup by IP address, 'off' = the user said no.
+ */
+export type LocationSetting = 'ask' | 'on' | 'off';
+export const LOCATION_SETTINGS: readonly LocationSetting[] = ['ask', 'on', 'off'];
+/** The id of the detected place. Real places have positive ids, so this never collides with a favorite. */
+export const LOCATION_PLACE_ID = -1;
+
 /** A city returned by geocoding, also used for favorites and recent searches. */
 export interface Place {
   id: number;
@@ -91,6 +100,7 @@ export interface Settings {
   timeFormat: TimeFormat;
   windUnit: WindUnit;
   tempLabels: TempLabels;
+  location: LocationSetting;
 }
 
 export interface AppState {
@@ -98,4 +108,6 @@ export interface AppState {
   recent: Place[];
   settings: Settings;
   lastPlace: Place | null;
+  /** The place found by the IP lookup. Only kept while settings.location is 'on'; never in favorites or recent. */
+  myLocation: Place | null;
 }
