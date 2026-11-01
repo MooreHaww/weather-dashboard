@@ -141,6 +141,7 @@ const KEYS = {
   ' ': { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' },
   Tab: { key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 },
   Escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 },
+  Delete: { key: 'Delete', code: 'Delete', windowsVirtualKeyCode: 46 },
   F5: { key: 'F5', code: 'F5', windowsVirtualKeyCode: 116 },
   r: { key: 'r', code: 'KeyR', windowsVirtualKeyCode: 82 },
   k: { key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75 },

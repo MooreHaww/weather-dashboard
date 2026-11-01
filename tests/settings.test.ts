@@ -70,6 +70,20 @@ describe('settings helpers', () => {
     expect(row.querySelector('label')!.htmlFor).toBe('');
   });
 
+  it('a hint is hidden text (sr-only) linked to the section or the control, next to a shown description', () => {
+    const el = settingsSection({ id: 'h', title: 'H', hint: 'Only for screen readers.', render: () => {} });
+    expect(el.querySelector('.settings-section-description')).toBeNull();
+    expect(el.querySelector('.sr-only')!.textContent).toBe('Only for screen readers.');
+    expect(el.getAttribute('aria-describedby')).toBe(el.querySelector('.sr-only')!.id);
+
+    const control = toggle();
+    const row = settingsRow({ label: 'X', description: 'State line', hint: 'Explanation', control });
+    const desc = row.querySelector('.settings-row-description')!;
+    const hint = row.querySelector('.sr-only')!;
+    expect(hint.textContent).toBe('Explanation');
+    expect(control.getAttribute('aria-describedby')).toBe(`${desc.id} ${hint.id}`);
+  });
+
   it('settingsRow keeps an existing control id and works without a description', () => {
     const control = toggle();
     control.id = 'my-toggle';
@@ -138,11 +152,15 @@ describe('the real sections', () => {
     ]);
   });
 
-  it('labels the time formats with examples from the current time, and says where they apply', () => {
+  it('labels the time formats with examples from the current time, and tells screen readers where they apply', () => {
     const root = mount();
     const labels = () => [...root.querySelectorAll('[role="radiogroup"]')[2]!.querySelectorAll('button')].map((b) => b.textContent);
     expect(labels()).toEqual(['12-hour (4:05 PM)', '24-hour (16:05)']);
-    expect(root.querySelector('#settings-time-format .settings-section-description')!.textContent).toMatch(/clock.*hourly.*sunrise and sunset/i);
+    const section = root.querySelector('#settings-time-format')!;
+    expect(section.querySelector('.settings-section-description')).toBeNull(); // not shown (1.5.1)
+    const hint = section.querySelector('.sr-only')!;
+    expect(hint.textContent).toMatch(/clock.*hourly.*sunrise and sunset/i);
+    expect(section.getAttribute('aria-describedby')).toBe(hint.id);
     nowLocal = '2026-10-17T00:09:00';
     syncSettingsControls();
     expect(labels()).toEqual(['12-hour (12:09 AM)', '24-hour (00:09)']);
@@ -162,6 +180,29 @@ describe('the real sections', () => {
     syncSettingsControls();
     expect(checked(root, 3)).toEqual(['Every hour']);
     settings.tempLabels = '3h';
+  });
+
+  it('shows only titles and controls: no explanation lines, only the Location line and its status line', () => {
+    const root = mount();
+    const shown = [...root.querySelectorAll('p:not(.sr-only)')].map((p) => [p.className, p.textContent]);
+    expect(shown).toEqual([
+      ['settings-section-description', 'Uses your IP address, sent to GeoJS.'],
+      ['settings-row-description', 'status:ask'],
+    ]);
+    expect(root.querySelector('#settings-time-format .settings-section-description')).toBeNull();
+    expect(root.querySelector('#settings-temperature-chart .settings-row-description')).toBeNull();
+  });
+
+  it('keeps the removed explanations for screen readers, linked to their section or control', () => {
+    const root = mount();
+    const hints = [...root.querySelectorAll<HTMLElement>('.sr-only')];
+    expect(hints.map((h) => h.textContent)).toEqual([
+      'Applies to the live clock, the hourly times and charts, sunrise and sunset, and the rain summary.',
+      'How often the strip under the chart shows a time, icon and temperature. Narrow windows show fewer.',
+    ]);
+    expect(root.querySelector('#settings-time-format')!.getAttribute('aria-describedby')).toBe(hints[0]!.id);
+    const timeLabels = root.querySelector('#settings-temperature-chart [role="radiogroup"]')!;
+    expect(timeLabels.getAttribute('aria-describedby')).toBe(hints[1]!.id);
   });
 
   it('has no version line of its own any more (the version lives in the Updates section)', () => {

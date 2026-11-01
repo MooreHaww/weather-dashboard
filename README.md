@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.5.0-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.5.1-orange?style=for-the-badge)
 
 | ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -85,8 +85,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (298 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (185 tests, needs internet) |
+| `npm test` | Unit and API tests (328 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (197 tests, needs internet) |
 | `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (11 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
@@ -116,15 +116,15 @@ There are no secrets anywhere. Copy `.env.example` to `.env` only if you want to
 
 ## ⚙️ Settings panel
 
-The gear in the title bar opens a liquid-glass panel that covers the whole window: the dashboard behind it stays visible but frosted. `Esc`, the close button (in the gear's spot) or the gear itself closes it, and keyboard focus stays inside while it is open. Its content scrolls when the window is short. With "reduce animations" on in Windows it fades instead of sliding.
+The gear in the title bar opens a liquid-glass panel that covers the whole window: the dashboard behind it stays visible but frosted. `Esc`, the close button (in the gear's spot) or the gear itself closes it, and keyboard focus stays inside while it is open. Its content scrolls when the window is short. With "reduce animations" on in Windows it fades instead of sliding. Since 1.5.1 it shows only section titles and controls, plus the lines that say where things stand (updates, location); the longer explanations are still read out by screen readers.
 
 | Section | Options |
 |---|---|
-| **Updates** | Always first. The installed version and the state: "Version 1.5.0 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
+| **Updates** | Always first. The installed version and the state: "Version 1.5.1 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 | **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
-| **Location** | **Use my location** switch. It is off until you answer the card in the sidebar. On: the app asks GeoJS for your city (by IP address, at each start) and says "Near Paris, France. This is approximate."; if it cannot, "Couldn't find your location. It tries again the next time the app starts." Off: no lookup is made and the stored place is deleted. The section says what is sent: "Uses your IP address to guess your city. The IP address is sent to GeoJS." |
+| **Location** | **Use my location** switch. It is off until you answer the card in the sidebar. On: the app asks GeoJS for your city (by IP address, at each start) and says "Near Paris, France. This is approximate."; if it cannot, "Couldn't find your location. It tries again the next time the app starts." Off: no lookup is made and the stored place is deleted. The section says what is sent: "Uses your IP address, sent to GeoJS." The **i** button next to the switch opens "How your IP address is used", the same text as under [Privacy](#privacy); `Esc` or a click outside closes it and leaves Settings open |
 
 Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
@@ -194,8 +194,21 @@ Electron main process
 - The app connects to up to three services:
   - **Open-Meteo**, for the forecast (the coordinates of the city on screen and of your favorite and recent cities) and for city search (what you type in the search box);
   - **GitHub**, to check this repository's releases for updates and download them (installed app only);
-  - **GeoJS**, only after you answer "Use my location" with yes and while the switch is on: one request at each start to `https://get.geojs.io/v1/ip/geo.json`. GeoJS sees your IP address, as any website does; the request carries no cookies and no identifiers, and its `User-Agent` is just `Weather-Dashboard`. Only the city, country, coordinates rounded to about 1 km and timezone from the answer are kept. The IP address is never stored or logged, and turning the switch off deletes the stored place.
+  - **GeoJS**, only after you answer "Use my location" with yes and while the switch is on: `https://get.geojs.io/v1/ip/geo.json` (below).
 - The window itself can only talk to the app's own local server. Links you click open in your browser.
+
+The text below is the same one the **i** button next to "Use my location" shows in Settings (a test checks that they match each other and the code):
+
+<!-- location-facts:start -->
+**How your IP address is used**
+
+- Only after you turn this on. Nothing is looked up before that.
+- The app asks GeoJS (geojs.io), over HTTPS, which city your IP address belongs to. GeoJS sees your IP address, like any website you connect to.
+- The request carries no cookies, no account and no app identifier, only the generic name "Weather-Dashboard".
+- The app saves only the city, country, an approximate position (about 1 km) and the time zone, on this PC. It never saves or logs your IP address.
+- It looks up once each time the app starts, and when you turn it on. Turning the switch off deletes the saved place.
+- The result is approximate and can be wrong, for example behind a VPN.
+<!-- location-facts:end -->
 
 ## Data and credits
 
@@ -288,6 +301,10 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 
 #### v1.5 (Fixes)
 - [x] The update state is now sent to the window as soon as it loads (until the first change it was skipped, so Settings could not tell "no check yet" from "no news")
+- [x] Settings shows only titles and controls (1.5.1)
+- [x] Your location card and the pin in the main card are purple (1.5.1)
+- [x] Remove a single city from Recent (1.5.1)
+- [x] Info button next to Use my location explains how the IP address is used (1.5.1)
 
 ### v1.6 - Liquid glass look
 - [ ] Make the full background 100% liquid glass with blur, and anything that needs a box gets extra blur behind it

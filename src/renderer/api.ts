@@ -40,6 +40,7 @@ export const api = {
 
   addRecent: (p: Place) => call<Place[]>('/api/recent', { method: 'POST', body: JSON.stringify(p) }),
   clearRecent: () => call<Place[]>('/api/recent', { method: 'DELETE' }),
+  removeRecent: (id: number) => call<Place[]>(`/api/recent/${id}`, { method: 'DELETE' }),
 
   /** Ask the local server to guess the city from the IP address. Only works while Settings > Location is on. */
   detectLocation: () => call<Place>('/api/location', { method: 'POST' }),

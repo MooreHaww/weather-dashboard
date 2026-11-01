@@ -180,6 +180,13 @@ export class Storage {
     });
   }
 
+  /** Forget one recent city (the rest keep their order; an unknown id changes nothing). The next launch's city is not touched. */
+  removeRecent(id: number) {
+    return this.update((s) => {
+      s.recent = s.recent.filter((r) => r.id !== id);
+    });
+  }
+
   updateSettings(patch: unknown) {
     return this.update((s) => {
       Object.assign(s.settings, validSettings(patch));

@@ -7,6 +7,7 @@ import path from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHero } from '../src/renderer/components/hero';
 import { setupSettings, switchControl, syncSettingsControls, type SettingsBindings } from '../src/renderer/components/settings';
+import { LOCATION_FACTS } from '../src/shared/locationText';
 import { renderSidebar, setupSidebar } from '../src/renderer/components/sidebar';
 import { setupUpdateReady } from '../src/renderer/components/updateNote';
 import { forecast } from '../src/server/openMeteo';
@@ -24,11 +25,18 @@ const SIDEBAR_HTML =
 describe('"Your location" in the sidebar', () => {
   let selected: Place[];
   let removed: Place[];
+  let removedRecent: Place[];
   beforeEach(() => {
     document.body.innerHTML = SIDEBAR_HTML;
     selected = [];
     removed = [];
-    setupSidebar({ onSelect: (p) => selected.push(p), onRemoveFavorite: (p) => removed.push(p), onClearRecent: () => {} });
+    removedRecent = [];
+    setupSidebar({
+      onSelect: (p) => selected.push(p),
+      onRemoveFavorite: (p) => removed.push(p),
+      onRemoveRecent: (p) => removedRecent.push(p),
+      onClearRecent: () => {},
+    });
   });
 
   const section = () => document.getElementById('location-section') as HTMLElement;
@@ -54,6 +62,12 @@ describe('"Your location" in the sidebar', () => {
     expect(card()!.querySelector('.fav-remove')).toBeNull();
     card()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
     expect(removed).toEqual([]);
+    expect(removedRecent).toEqual([]);
+  });
+
+  it('is purple: its own "loc" class, separate from favorites and recent cities', () => {
+    renderSidebar([], [], LOCATION_PLACE_ID, new Map(), { place: paris, note: 'x' });
+    expect([...card()!.classList]).toEqual(['place-card', 'loc', 'is-active']);
   });
 
   it('selects the place on click and on Enter, and marks it active when it is the one shown', () => {
@@ -81,6 +95,53 @@ describe('"Your location" in the sidebar', () => {
   });
 });
 
+describe('the "×" on a Recent card (1.5.1)', () => {
+  const london: Place = { id: 2643743, name: 'London', latitude: 51.51, longitude: -0.13, country: 'United Kingdom', countryCode: 'GB' };
+  let calls: string[];
+  beforeEach(() => {
+    document.body.innerHTML = SIDEBAR_HTML;
+    calls = [];
+    setupSidebar({
+      onSelect: (p) => calls.push(`select ${p.name}`),
+      onRemoveFavorite: (p) => calls.push(`favorite ${p.name}`),
+      onRemoveRecent: (p) => calls.push(`recent ${p.name}`),
+      onClearRecent: () => calls.push('clear'),
+    });
+    // Tokyo is a favorite and a recent city at the same time.
+    renderSidebar([tokyo], [tokyo, london], tokyo.id, new Map(), { place: paris, note: 'x' });
+  });
+  const recentCard = (name: string) => [...document.querySelectorAll<HTMLElement>('#recent .place-card')].find((c) => c.querySelector('.fav-name')!.textContent === name)!;
+
+  it('every recent card has one, built like the favorites one and named "Remove <city> from recent"', () => {
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('#recent .fav-remove')];
+    expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Remove Tokyo from recent', 'Remove London from recent']);
+    expect(buttons.every((b) => b.type === 'button' && b.title === b.getAttribute('aria-label'))).toBe(true);
+    expect(document.querySelector('#favorites .fav-remove')!.getAttribute('aria-label')).toBe('Remove Tokyo from favorites');
+    expect(document.querySelector('#location-list .fav-remove')).toBeNull();
+  });
+
+  it('a click removes it from recent only (not a favorite removal, not a selection)', () => {
+    recentCard('London').querySelector<HTMLButtonElement>('.fav-remove')!.click();
+    recentCard('Tokyo').querySelector<HTMLButtonElement>('.fav-remove')!.click();
+    expect(calls).toEqual(['recent London', 'recent Tokyo']);
+    document.querySelector<HTMLButtonElement>('#favorites .fav-remove')!.click();
+    expect(calls.at(-1)).toBe('favorite Tokyo');
+  });
+
+  it('Delete on a focused recent card removes it; Enter still selects it', () => {
+    recentCard('London').dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
+    recentCard('London').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    expect(calls).toEqual(['recent London', 'select London']);
+  });
+
+  it('escapes the name in the label', () => {
+    renderSidebar([], [{ ...london, name: '"><img src=x>' }], null, new Map());
+    const b = document.querySelector('#recent .fav-remove')!;
+    expect(b.getAttribute('aria-label')).toBe('Remove "><img src=x> from recent');
+    expect(document.querySelector('#recent img')).toBeNull();
+  });
+});
+
 describe('the hero for the detected place', () => {
   it('has no star (it is not a favorite), and keeps it for other cities', async () => {
     const json = await readFile(path.join(__dirname, 'fixtures', 'forecast-tokyo.json'), 'utf8');
@@ -91,6 +152,20 @@ describe('the hero for the detected place', () => {
     expect(hero.querySelector('.place-name')!.textContent).toBe('Paris');
     renderHero(hero, tokyo, w, false, w.current.time, '12h');
     expect(hero.querySelector('#star')).not.toBeNull();
+  });
+
+  it('has a purple pin named "Your location" next to the name, only for the detected place', async () => {
+    const json = await readFile(path.join(__dirname, 'fixtures', 'forecast-tokyo.json'), 'utf8');
+    const w = await forecast(async () => new Response(json, { status: 200 }), 35.69, 139.69, 'metric');
+    const hero = document.createElement('section');
+    renderHero(hero, paris, w, false, w.current.time, '12h');
+    const pin = hero.querySelector('.place-row .loc-pin')!;
+    expect(pin.getAttribute('role')).toBe('img');
+    expect(pin.getAttribute('aria-label')).toBe('Your location');
+    expect(pin.previousElementSibling!.classList.contains('place-name')).toBe(true);
+    expect(pin.querySelector('svg')!.getAttribute('aria-hidden')).toBe('true');
+    renderHero(hero, tokyo, w, false, w.current.time, '12h');
+    expect(hero.querySelector('.loc-pin')).toBeNull();
   });
 });
 
@@ -122,10 +197,10 @@ describe('the Settings > Location switch', () => {
   const sw = () => document.querySelector<HTMLButtonElement>('#settings-location [role="switch"]')!;
   const status = () => document.getElementById('settings-location-status')!.textContent;
 
-  it('is its own section with the privacy line, a named switch and a status line', () => {
+  it('is its own section with one short line, a named switch and a status line', () => {
     const section = document.getElementById('settings-location')!;
     expect(section.querySelector('h3')!.textContent).toBe('Location');
-    expect(section.querySelector('.settings-section-description')!.textContent).toBe('Uses your IP address to guess your city. The IP address is sent to GeoJS.');
+    expect(section.querySelector('.settings-section-description')!.textContent).toBe('Uses your IP address, sent to GeoJS.');
     expect(sw().getAttribute('aria-checked')).toBe('false'); // "ask" counts as off: nothing is looked up
     expect(section.querySelector('label')!.textContent).toBe('Use my location');
     expect((section.querySelector('label') as HTMLLabelElement).htmlFor).toBe(sw().id);
@@ -147,6 +222,70 @@ describe('the Settings > Location switch', () => {
     settings.location = 'on';
     syncSettingsControls();
     expect(sw().getAttribute('aria-checked')).toBe('true');
+  });
+
+  describe('the "i" button next to the switch', () => {
+    const info = () => document.querySelector<HTMLButtonElement>('#settings-location .info-button')!;
+    const popover = () => document.getElementById('location-info')!;
+    const key = (el: Element, k: string) => el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+
+    it('is a named button that controls the popover, after the switch (the label still names the switch)', () => {
+      expect(info().tagName).toBe('BUTTON');
+      expect(info().type).toBe('button');
+      expect(info().getAttribute('aria-label')).toBe('How is my IP address used?');
+      expect(info().getAttribute('aria-expanded')).toBe('false');
+      expect(info().getAttribute('aria-controls')).toBe('location-info');
+      expect(sw().nextElementSibling).toBe(info());
+      expect(info().nextElementSibling).toBe(popover());
+      expect((document.querySelector('#settings-location label') as HTMLLabelElement).htmlFor).toBe(sw().id);
+      expect(popover().hidden).toBe(true);
+    });
+
+    it('the popover is a dialog with the shared text, exactly', () => {
+      expect(popover().getAttribute('role')).toBe('dialog');
+      expect(document.getElementById(popover().getAttribute('aria-labelledby')!)!.textContent).toBe(LOCATION_FACTS.title);
+      expect(popover().querySelector('h4')!.textContent).toBe('How your IP address is used');
+      expect([...popover().querySelectorAll('li')].map((li) => li.textContent)).toEqual([...LOCATION_FACTS.lines]);
+    });
+
+    it('opens and closes on click, with aria-expanded following, and focus goes into it', () => {
+      info().click();
+      expect(popover().hidden).toBe(false);
+      expect(info().getAttribute('aria-expanded')).toBe('true');
+      expect(document.activeElement).toBe(popover());
+      info().click();
+      expect(popover().hidden).toBe(true);
+      expect(info().getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('Escape closes only the popover (Settings stays open) and gives focus back to the button', () => {
+      document.getElementById('settings-button')!.click(); // open Settings
+      expect(document.getElementById('settings')!.classList.contains('is-open')).toBe(true);
+      info().click();
+      key(popover(), 'Escape');
+      expect(popover().hidden).toBe(true);
+      expect(document.activeElement).toBe(info());
+      expect(document.getElementById('settings')!.classList.contains('is-open')).toBe(true);
+      key(info(), 'Escape'); // with the popover closed, Escape closes Settings as before
+      expect(document.getElementById('settings')!.classList.contains('is-open')).toBe(false);
+    });
+
+    it('a click outside closes it; a click inside does not', () => {
+      info().click();
+      popover().querySelector('li')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(popover().hidden).toBe(false);
+      document.querySelector('.settings-close')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(popover().hidden).toBe(true);
+      expect(info().getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('closing Settings closes it', () => {
+      document.getElementById('settings-button')!.click();
+      info().click();
+      document.querySelector<HTMLButtonElement>('.settings-close')!.click();
+      expect(popover().hidden).toBe(true);
+      expect(info().getAttribute('aria-expanded')).toBe('false');
+    });
   });
 
   it('switchControl is a button with role "switch" that reports the new value', () => {

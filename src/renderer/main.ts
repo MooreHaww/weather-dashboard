@@ -414,6 +414,19 @@ async function boot(): Promise<void> {
         showBanner((err as Error).message); // the server could not save: say so, keep the list as it is
       }
     },
+    onRemoveRecent: async (p) => {
+      const index = app.state.recent.findIndex((r) => r.id === p.id);
+      try {
+        app.state.recent = await api.removeRecent(p.id);
+      } catch (err) {
+        showBanner((err as Error).message); // the server could not save: say so, keep the list as it is
+        return;
+      }
+      renderCards(); // the city on screen stays as it is
+      // Focus the card that took its place (or the new last one); with none left, the search box.
+      const cards = document.querySelectorAll<HTMLElement>('#recent .place-card');
+      (cards[Math.min(index, cards.length - 1)] ?? search).focus();
+    },
     onClearRecent: async () => {
       try {
         app.state.recent = await api.clearRecent();

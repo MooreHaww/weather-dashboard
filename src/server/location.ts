@@ -63,7 +63,9 @@ function timezone(v: unknown): string | null {
   }
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100; // about 1 km: a city, not a street
+/** Coordinates are kept to 2 decimals: 0.01° is about 1.1 km, a city, not a street (LOCATION_FACTS says "about 1 km"). */
+export const COORDINATE_DECIMALS = 2;
+const round2 = (n: number) => Math.round(n * 10 ** COORDINATE_DECIMALS) / 10 ** COORDINATE_DECIMALS;
 
 /**
  * The place in a GeoJS answer, or null if anything required is missing or wrong:

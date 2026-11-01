@@ -328,14 +328,22 @@ describe('settings panel', () => {
     await waitClosed();
   });
 
-  it('Time format: its own section, with examples from the current time and a line saying where it applies', async () => {
-    const info = await page.evaluate<{ title: string; desc: string; labels: string[]; values: string[] }>(`(() => {
+  it('Time format: its own section, with examples from the current time; where it applies is told to screen readers only', async () => {
+    const info = await page.evaluate<{ title: string; desc: string; hidden: boolean; shown: number; labels: string[]; values: string[] }>(`(() => {
       const s = document.getElementById('settings-time-format');
       const b = [...s.querySelectorAll('button')];
-      return { title: s.querySelector('h3').textContent, desc: s.querySelector('.settings-section-description').textContent, labels: b.map((x) => x.textContent), values: b.map((x) => x.dataset.value) };
+      const hint = document.getElementById(s.getAttribute('aria-describedby'));
+      const r = hint.getBoundingClientRect();
+      return {
+        title: s.querySelector('h3').textContent, desc: hint.textContent, hidden: r.width <= 1 && r.height <= 1,
+        shown: s.querySelectorAll('.settings-section-description, .settings-row-description').length,
+        labels: b.map((x) => x.textContent), values: b.map((x) => x.dataset.value),
+      };
     })()`);
     expect(info.title).toBe('Time format');
     expect(info.desc).toMatch(/clock.*hourly.*sunrise and sunset/i);
+    expect(info.hidden).toBe(true);
+    expect(info.shown).toBe(0);
     expect(info.values).toEqual(['12h', '24h']);
     const tokyoNow = localIsoIn('Asia/Tokyo');
     const m24 = info.labels[1]!.match(/^24-hour \((\d{2}):(\d{2})\)$/);

@@ -49,6 +49,10 @@ export function stateRoutes(storage: Storage): Router {
     res.json((await storage.clearRecent()).recent);
   });
 
+  router.delete('/recent/:id', async (req, res) => {
+    res.json((await storage.removeRecent(idParam(req.params.id))).recent);
+  });
+
   router.get('/settings', async (_req, res) => {
     res.json((await storage.get()).settings);
   });

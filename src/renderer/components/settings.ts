@@ -2,7 +2,7 @@
 // the whole window, frosting the dashboard behind it. Add sections to
 // SETTINGS_SECTIONS below (see "Settings panel" in the README).
 
-import { LOCATION_PRIVACY_LINE } from '../../shared/locationText';
+import { LOCATION_FACTS, LOCATION_SETTINGS_LINE } from '../../shared/locationText';
 import { formatTime } from '../../shared/time';
 import { WIND_LABELS, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
 
@@ -10,8 +10,10 @@ export interface SettingsSection {
   /** Unique id, used for the section's DOM id ("settings-<id>"). */
   id: string;
   title: string;
-  /** An optional short line under the title, saying what the section does. */
+  /** An optional short line under the title. Only for what the user must know (Location's one line); explanations go in `hint`. */
   description?: string;
+  /** Hidden text for screen readers (linked with aria-describedby), not shown: the panel shows only titles and controls. */
+  hint?: string;
   /** Fill the section body, typically with settingsRow(...) elements. */
   render(body: HTMLElement): void;
 }
@@ -128,7 +130,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'time-format',
     title: 'Time format',
-    description: 'Applies to the live clock, the hourly times and charts, sunrise and sunset, and the rain summary.',
+    hint: 'Applies to the live clock, the hourly times and charts, sunrise and sunset, and the rain summary.',
     render(body) {
       const example = (format: TimeFormat) => formatTime(bindings!.now(), format, { minutes: true });
       body.append(
@@ -153,7 +155,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       body.append(
         settingsRow({
           label: 'Time labels',
-          description: 'How often the strip under the chart shows a time, icon and temperature. Narrow windows show fewer.',
+          hint: 'How often the strip under the chart shows a time, icon and temperature. Narrow windows show fewer.',
           control: segmentedControl<TempLabels>({
             options: [
               { value: '3h', label: 'Every 3 hours' },
@@ -170,7 +172,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   {
     id: 'location',
     title: 'Location',
-    description: LOCATION_PRIVACY_LINE,
+    description: LOCATION_SETTINGS_LINE,
     render(body) {
       const row = settingsRow({
         label: 'Use my location',
@@ -180,6 +182,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
           onChange: (on) => bindings!.setLocation(on),
         }),
       });
+      // The "i" button sits after the switch (so the row's label still names the switch), its popover right after it.
+      row.querySelector('.settings-row-control')!.append(
+        ...infoPopover({ id: 'location-info', label: 'How is my IP address used?', ...LOCATION_FACTS }),
+      );
       const status = row.querySelector('.settings-row-description')!;
       status.id = 'settings-location-status';
       onSettingsSync(() => {
@@ -193,8 +199,20 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
 let rowCount = 0;
 
-/** One labelled setting: label (and optional description) on the left, the control on the right (none for a plain information row). */
-export function settingsRow(opts: { label: string; description?: string; control?: HTMLElement }): HTMLElement {
+/** A `.sr-only` paragraph: read by screen readers through aria-describedby, not shown. */
+function hiddenHint(id: string, text: string): HTMLElement {
+  const p = document.createElement('p');
+  p.className = 'sr-only';
+  p.id = id;
+  p.textContent = text;
+  return p;
+}
+
+/**
+ * One labelled setting: label (and optional description) on the left, the control on the right (none for a plain information row).
+ * `description` is shown (state lines only); `hint` is for screen readers only.
+ */
+export function settingsRow(opts: { label: string; description?: string; hint?: string; control?: HTMLElement }): HTMLElement {
   const n = ++rowCount;
   const row = document.createElement('div');
   row.className = 'settings-row';
@@ -217,14 +235,21 @@ export function settingsRow(opts: { label: string; description?: string; control
   }
   text.append(label);
 
+  const describedBy: string[] = [];
   if (opts.description) {
     const desc = document.createElement('p');
     desc.className = 'settings-row-description';
     desc.id = `settings-desc-${n}`;
     desc.textContent = opts.description;
     text.append(desc);
-    widget?.setAttribute('aria-describedby', desc.id);
+    describedBy.push(desc.id);
   }
+  if (opts.hint) {
+    const hint = hiddenHint(`settings-hint-${n}`, opts.hint);
+    text.append(hint);
+    describedBy.push(hint.id);
+  }
+  if (describedBy.length) widget?.setAttribute('aria-describedby', describedBy.join(' '));
 
   row.append(text);
   if (widget) {
@@ -250,16 +275,157 @@ export function settingsSection(section: SettingsSection): HTMLElement {
   body.className = 'settings-section-body';
   section.render(body);
   el.append(heading);
+  const describedBy: string[] = [];
   if (section.description) {
     const desc = document.createElement('p');
     desc.className = 'settings-section-description';
     desc.id = `settings-${section.id}-description`;
     desc.textContent = section.description;
-    el.setAttribute('aria-describedby', desc.id);
+    describedBy.push(desc.id);
     el.append(desc);
   }
+  if (section.hint) {
+    const hint = hiddenHint(`settings-${section.id}-hint`, section.hint);
+    describedBy.push(hint.id);
+    el.append(hint);
+  }
+  if (describedBy.length) el.setAttribute('aria-describedby', describedBy.join(' '));
   el.append(body);
   return el;
+}
+
+/** Closes every open info popover (when the panel closes). */
+const popoverClosers = new Set<() => void>();
+
+const POPOVER_MARGIN = 16;
+const POPOVER_GAP = 8;
+const POPOVER_WIDTH = 320;
+
+/**
+ * A small "i" button and the popover it opens (static text: a title and a list of lines, set with textContent).
+ * The popover is `position: fixed` (the sheet is its containing block, so the scrolling sections never clip it), placed
+ * under the button or above it, inside the sections area with 16 px margins; it scrolls inside itself if it does not fit.
+ * Escape closes only the popover and returns focus to the button; a click outside or focus leaving closes it too.
+ */
+export function infoPopover(opts: { id: string; label: string; title: string; lines: readonly string[] }): [HTMLButtonElement, HTMLElement] {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'info-button';
+  button.setAttribute('aria-label', opts.label);
+  button.title = opts.label;
+  button.setAttribute('aria-expanded', 'false');
+  button.setAttribute('aria-controls', opts.id);
+  button.innerHTML = '<span aria-hidden="true">i</span>';
+
+  const popover = document.createElement('div');
+  popover.id = opts.id;
+  popover.className = 'info-popover';
+  popover.setAttribute('role', 'dialog');
+  popover.tabIndex = -1;
+  popover.hidden = true;
+  const title = document.createElement('h4');
+  title.className = 'info-popover-title';
+  title.id = `${opts.id}-title`;
+  title.textContent = opts.title;
+  popover.setAttribute('aria-labelledby', title.id);
+  const list = document.createElement('ul');
+  list.className = 'info-popover-list';
+  list.append(
+    ...opts.lines.map((line) => {
+      const li = document.createElement('li');
+      li.textContent = line;
+      return li;
+    }),
+  );
+  popover.append(title, list);
+
+  const isOpen = () => !popover.hidden;
+
+  const place = () => {
+    if (!isOpen()) return;
+    // The room it may use: the sections area (below the panel header), never past the window.
+    const area = (button.closest('.settings-sections') ?? document.documentElement).getBoundingClientRect();
+    const top = Math.max(area.top, 0) + POPOVER_MARGIN;
+    const bottom = Math.min(area.bottom, window.innerHeight) - POPOVER_MARGIN;
+    const left = Math.max(area.left, 0) + POPOVER_MARGIN;
+    const right = Math.min(area.right, window.innerWidth) - POPOVER_MARGIN;
+    const width = Math.max(0, Math.min(POPOVER_WIDTH, right - left));
+    popover.style.width = `${width}px`;
+    popover.style.maxHeight = '';
+    popover.style.left = '0px';
+    popover.style.top = '0px';
+    // Where (0, 0) lands: the containing block's corner (the sheet), whatever it is.
+    const origin = popover.getBoundingClientRect();
+    const height = origin.height;
+    const b = button.getBoundingClientRect();
+    // The button was scrolled out of sight: there is nothing left to point at.
+    if (b.bottom < top - POPOVER_MARGIN || b.top > bottom + POPOVER_MARGIN) {
+      close(popover.contains(document.activeElement));
+      return;
+    }
+    const below = bottom - (b.bottom + POPOVER_GAP);
+    const above = b.top - POPOVER_GAP - top;
+    const under = below >= height || below >= above;
+    const room = Math.max(0, under ? below : above);
+    const shown = Math.min(height, room);
+    popover.style.maxHeight = `${room}px`;
+    const y = under ? b.bottom + POPOVER_GAP : b.top - POPOVER_GAP - shown;
+    const x = Math.min(Math.max(b.right - width, left), right - width);
+    popover.style.left = `${Math.round(x - origin.left)}px`;
+    popover.style.top = `${Math.round(Math.min(Math.max(y, top), bottom - shown) - origin.top)}px`;
+  };
+  const onScroll = (e: Event) => {
+    if (e.target !== popover) place(); // its own scrolling moves nothing
+  };
+
+  const onPointerDown = (e: PointerEvent) => {
+    const target = e.target as Node;
+    if (popover.contains(target) || button.contains(target)) return;
+    close(popover.contains(document.activeElement));
+  };
+
+  function open(): void {
+    popover.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    // Opened from the keyboard after the sections were scrolled away: bring the button back first (only the sections scroll).
+    button.scrollIntoView({ block: 'nearest' });
+    place();
+    if (!isOpen()) return; // its button is out of sight
+    window.addEventListener('resize', place);
+    document.addEventListener('scroll', onScroll, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    popoverClosers.add(close);
+    // preventScroll: it is already placed in view; focusing must not scroll the panel behind it.
+    popover.focus({ preventScroll: true });
+  }
+
+  function close(returnFocus = false): void {
+    if (!isOpen()) return;
+    popover.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    window.removeEventListener('resize', place);
+    document.removeEventListener('scroll', onScroll, true);
+    document.removeEventListener('pointerdown', onPointerDown, true);
+    popoverClosers.delete(close);
+    if (returnFocus) button.focus({ preventScroll: true });
+  }
+
+  button.addEventListener('click', () => (isOpen() ? close() : open()));
+  for (const el of [button, popover] as HTMLElement[]) {
+    el.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !isOpen()) return;
+      // Only the popover closes: the panel's own Escape handler never sees this key.
+      e.preventDefault();
+      e.stopPropagation();
+      close(true);
+    });
+    el.addEventListener('focusout', (e) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && (popover.contains(next) || button.contains(next))) return;
+      if (next) close(); // focus moved somewhere else (a window losing focus leaves it open)
+    });
+  }
+  return [button, popover];
 }
 
 /** Render the sections into the panel body (replacing what was there). */
@@ -306,6 +472,7 @@ export function setupSettings(b: SettingsBindings): { open: () => void; close: (
   function hide(): void {
     if (!open) return;
     open = false;
+    popoverClosers.forEach((closePopover) => closePopover());
     root.classList.remove('is-open');
     background.forEach((el) => (el.inert = false));
     gear.setAttribute('aria-expanded', 'false');
@@ -343,10 +510,13 @@ export function setupSettings(b: SettingsBindings): { open: () => void; close: (
     }
     const first = items[0]!;
     const last = items[items.length - 1]!;
-    if (e.shiftKey && document.activeElement === first) {
+    // Focus inside an open info popover counts as being on its button (the popover sits right after it).
+    const popover = document.activeElement?.closest('.info-popover');
+    const active = popover ? document.querySelector(`[aria-controls="${popover.id}"]`) : document.activeElement;
+    if (e.shiftKey && active === first) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
+    } else if (!e.shiftKey && active === last) {
       e.preventDefault();
       first.focus();
     }

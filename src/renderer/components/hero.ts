@@ -43,8 +43,9 @@ export function renderHero(
         <h1 class="place-name">${esc(place.name)}</h1>
         ${
           place.id === LOCATION_PLACE_ID
-            ? '' // the detected place is not a favorite (it is always listed under "Your location")
-            : `<button type="button" class="star" id="star" aria-pressed="${isFavorite}"
+            ? // the detected place is not a favorite (it is always listed under "Your location"): a pin instead of the star
+              `<span class="loc-pin" id="loc-pin" role="img" aria-label="Your location" title="Your location">${glyphs.pin}</span>`
+            :`<button type="button" class="star" id="star" aria-pressed="${isFavorite}"
           title="${isFavorite ? 'Remove from favorites' : 'Add to favorites'}">${glyphs.star}</button>`
         }
       </div>

@@ -1,6 +1,7 @@
 // v1.5 "Location" in the real window: the consent card, nothing looked up before the answer, the detected
 // place on top of the sidebar, "Not now" remembered, a failed lookup, switching off, and the places the
 // detected city must never end up in (Recent, the next start's city, the star).
+// v1.5.1: the purple card and pin, the one Settings line, and the "i" button with its popover.
 //
 // GeoJS is never contacted: the app is started with tests/e2e/support/fakeGeoJs.cjs preloaded into its
 // main process (NODE_OPTIONS=--require), which answers with a fixed place (Paris) and records each request.
@@ -11,11 +12,14 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp, type Seed } from '../../scripts/launch';
+import { LOCATION_FACTS } from '../../src/shared/locationText';
+import { contrast, cssColorOver, decodePng, type Rgb } from './support/pixels';
 
 const FAKE = path.join(__dirname, 'support', 'fakeGeoJs.cjs').replace(/\\/g, '/');
 const ENV = { NODE_OPTIONS: `--require ${FAKE}` };
 
 const PRIVACY = 'Uses your IP address to guess your city. The IP address is sent to GeoJS.';
+const SETTINGS_LINE = 'Uses your IP address, sent to GeoJS.';
 const IP = '203.0.113.77';
 const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69171, country: 'Japan', countryCode: 'JP', timezone: 'Asia/Tokyo' };
 const paris = { id: -1, name: 'Paris', latitude: 48.86, longitude: 2.35, country: 'France', countryCode: 'FR', timezone: 'Europe/Paris' };
@@ -96,7 +100,11 @@ describe('before the user answers', () => {
     await openSettings();
     expect(await switchOn()).toBe('false');
     expect(await text('#settings-location-status')).toBe('Off. No location lookup is made.');
-    expect(await text('#settings-location .settings-section-description')).toBe(PRIVACY);
+    expect(await text('#settings-location .settings-section-description')).toBe(SETTINGS_LINE);
+    // Only titles and controls: the one Location line and its status line are the only text lines shown (1.5.1).
+    expect(
+      await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-sections p')].filter((p) => p.getBoundingClientRect().width > 1 && !p.closest('#location-info')).map((p) => p.textContent)`),
+    ).toEqual([SETTINGS_LINE, 'Off. No location lookup is made.']);
     await closeSettings();
     expect(await geoCalls()).toEqual([]);
     expect(app!.errors).toEqual([]);
@@ -364,5 +372,268 @@ describe('Settings > Updates in this (unpackaged) build', () => {
     await openSettings();
     expect(await page.evaluate(`document.getElementById('update-check') === null`)).toBe(true);
     await closeSettings();
+  });
+});
+
+const london = { id: 2643743, name: 'London', latitude: 51.50853, longitude: -0.12574, country: 'United Kingdom', countryCode: 'GB', timezone: 'Europe/London' };
+/** London on screen (a recent city), Tokyo a favorite, Paris detected. */
+const THREE_KINDS: Seed = { lastPlace: london, favorites: [tokyo], recent: [london], settings: { location: 'on' }, myLocation: paris };
+
+describe('purple "Your location" and the pin (1.5.1)', () => {
+  /** The background and the accent bar of a card, as drawn. */
+  const colors = (selector: string) =>
+    page.evaluate<{ bg: string; bar: string }>(`(() => {
+      const c = document.querySelector(${JSON.stringify(selector)});
+      return { bg: getComputedStyle(c).backgroundColor, bar: getComputedStyle(c, '::before').backgroundColor };
+    })()`);
+  const show = async (selector: string, name: string) => {
+    await clickOn(selector);
+    await page.waitFor(`document.querySelector('.place-name')?.textContent === ${JSON.stringify(name)} && !document.getElementById('main').classList.contains('is-loading')`, 15000);
+    await page.move(5, 700); // no hover on the cards
+    await settle(400);
+  };
+
+  it('the active card has a purple bar and a subtle purple tint, unlike an active favorite or recent city; hover is purple too', async () => {
+    await start(THREE_KINDS);
+    await page.waitFor(`document.querySelector('#location-list .place-card')`, 15000);
+    await page.move(5, 700);
+    await settle(400);
+    const recent = await colors('#recent .place-card.is-active');
+
+    // Hover on the (not active) location card.
+    const [x, y] = await centerOf('#location-list .place-card');
+    await page.move(x, y);
+    await settle(400);
+    const hover = (await colors('#location-list .place-card')).bg;
+
+    await show('#favorites .place-card', 'Tokyo');
+    const favorite = await colors('#favorites .place-card.is-active');
+    await show('#location-list .place-card', 'Paris');
+    const loc = await colors('#location-list .place-card.is-active');
+
+    expect(loc).toEqual({ bg: 'rgba(167, 139, 250, 0.1)', bar: 'rgb(167, 139, 250)' });
+    expect(hover).toBe('rgba(167, 139, 250, 0.08)');
+    // Favorites (gold) and Recent (blue) are as they were.
+    expect(favorite).toEqual({ bg: 'rgba(251, 191, 36, 0.1)', bar: 'rgb(251, 191, 36)' });
+    expect(recent).toEqual({ bg: 'rgba(96, 165, 250, 0.14)', bar: 'rgb(96, 165, 250)' });
+    expect(new Set([loc.bar, favorite.bar, recent.bar]).size).toBe(3);
+    expect(new Set([loc.bg, favorite.bg, recent.bg]).size).toBe(3);
+    // The meaning does not rest on the colour: the section keeps its title.
+    expect(await text('#location-title')).toBe('Your location');
+    expect(app!.errors).toEqual([]);
+  });
+
+  it('text on the purple card and the pin are readable against what is really drawn behind them', async () => {
+    await start(THREE_KINDS);
+    await page.waitFor(`document.querySelector('#location-list .place-card')`, 15000);
+    await show('#location-list .place-card', 'Paris');
+    const at = await page.evaluate<{ card: number[]; name: string; sub: string; pin: number[]; pinColor: string }>(`(() => {
+      const card = document.querySelector('#location-list .place-card').getBoundingClientRect();
+      const pin = document.getElementById('loc-pin').getBoundingClientRect();
+      return {
+        card: [card.left + 7, card.top + card.height / 2],             // tint, right of the bar, left of the text
+        name: getComputedStyle(document.querySelector('#location-list .fav-name')).color,
+        sub: getComputedStyle(document.querySelector('#location-list .fav-sub')).color,
+        pin: [pin.left + 2, pin.top + pin.height / 2],                 // the pin's own padding: the hero card behind it
+        pinColor: getComputedStyle(document.getElementById('loc-pin')).color,
+      };
+    })()`);
+    const shot = decodePng(await page.screenshot({ cssPixels: true }));
+    const behindCard: Rgb = shot.at(at.card[0]!, at.card[1]!);
+    const behindPin: Rgb = shot.at(at.pin[0]!, at.pin[1]!);
+    const ratios = {
+      name: contrast(cssColorOver(at.name, behindCard), behindCard),
+      country: contrast(cssColorOver(at.sub, behindCard), behindCard),
+      pin: contrast(cssColorOver(at.pinColor, behindPin), behindPin),
+    };
+    expect(at.pinColor).toBe('rgb(167, 139, 250)');
+    expect(ratios.name, JSON.stringify({ ratios, behindCard })).toBeGreaterThanOrEqual(4.5);
+    expect(ratios.country, JSON.stringify({ ratios, behindCard })).toBeGreaterThanOrEqual(4.5);
+    expect(ratios.pin, JSON.stringify({ ratios, behindPin })).toBeGreaterThanOrEqual(3); // a graphic: 3:1
+  });
+
+  it('the pin is next to the name only while the city on screen is your location, named "Your location"; the pulsing dot is unchanged', async () => {
+    await start(THREE_KINDS);
+    await page.waitFor(`document.querySelector('#location-list .place-card')`, 15000);
+    const pin = () => page.evaluate<{ label: string | null; role: string | null; afterName: boolean } | null>(`(() => {
+      const p = document.getElementById('loc-pin');
+      return p && { label: p.getAttribute('aria-label'), role: p.getAttribute('role'), afterName: p.previousElementSibling.classList.contains('place-name') };
+    })()`);
+    expect(await placeName()).toBe('London');
+    expect(await pin()).toBeNull();
+    expect(await page.evaluate(`document.getElementById('star') !== null`)).toBe(true);
+
+    await show('#location-list .place-card', 'Paris');
+    expect(await pin()).toEqual({ label: 'Your location', role: 'img', afterName: true });
+    expect(await visible('#loc-pin')).toBe(true);
+    expect(await page.evaluate(`document.getElementById('star') === null`)).toBe(true);
+    // The current-time dot and its legend entry are still there, as before.
+    expect(await page.evaluate<number>(`document.querySelectorAll('#now-dot.pulse-dot > .core, #now-dot.pulse-dot > .ring').length`)).toBe(2);
+    expect(await visible('#legend-now')).toBe(true);
+
+    await show('#favorites .place-card', 'Tokyo');
+    expect(await pin()).toBeNull();
+    expect(app!.errors).toEqual([]);
+  });
+});
+
+describe('the "i" button next to "Use my location" (1.5.1)', () => {
+  const popoverOpen = `!document.getElementById('location-info').hidden`;
+  const expanded = () => page.evaluate<string>(`document.querySelector('#settings-location .info-button').getAttribute('aria-expanded')`);
+  const focused = () => page.evaluate<string>(`document.activeElement.id || document.activeElement.className`);
+  const settingsOpen = () => page.evaluate<boolean>(`document.getElementById('settings').classList.contains('is-open')`);
+  const focusButton = () => page.evaluate(`document.querySelector('#settings-location .info-button').focus()`);
+
+  it('opens on click, Enter and Space; Escape closes only the popover and focus returns; a click outside closes it', async () => {
+    await start();
+    await openSettings();
+    expect(await page.evaluate<string>(`document.querySelector('#settings-location .info-button').getAttribute('aria-label')`)).toBe('How is my IP address used?');
+    expect(await page.evaluate<string>(`document.querySelector('#settings-location .info-button').getAttribute('aria-controls')`)).toBe('location-info');
+    expect(await expanded()).toBe('false');
+    expect(await page.evaluate<boolean>(popoverOpen)).toBe(false);
+
+    // Click.
+    await page.evaluate(`document.querySelector('#settings-location .info-button').scrollIntoView({ block: 'center' })`);
+    await clickOn('#settings-location .info-button');
+    await page.waitFor(popoverOpen, 2000);
+    expect(await expanded()).toBe('true');
+    expect(await focused()).toBe('location-info');
+    expect(await text('#location-info h4')).toBe(LOCATION_FACTS.title);
+    expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#location-info li')].map((li) => li.textContent)`)).toEqual([...LOCATION_FACTS.lines]);
+    // Escape: only the popover closes.
+    await page.press('Escape');
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    expect(await settingsOpen()).toBe(true);
+    expect(await focused()).toBe('info-button');
+    expect(await expanded()).toBe('false');
+
+    // Enter, then Space, on the focused button.
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    await page.press('Escape');
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    await page.press(' ');
+    await page.waitFor(popoverOpen, 2000);
+    expect(await expanded()).toBe('true');
+
+    // A click outside (on a section title) closes it; Settings stays open.
+    await clickOn('#settings-units .settings-section-title');
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    expect(await settingsOpen()).toBe(true);
+    expect(await expanded()).toBe('false');
+
+    // A click inside it does not close it.
+    await focusButton();
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    await clickOn('#location-info li');
+    await settle(300);
+    expect(await page.evaluate<boolean>(popoverOpen)).toBe(true);
+
+    // Escape once more closes the popover, a second Escape closes Settings as before.
+    await page.press('Escape');
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    expect(await settingsOpen()).toBe(true);
+    await page.press('Escape');
+    await page.waitFor(`document.getElementById('settings').hidden`, 2000);
+    expect(app!.errors).toEqual([]);
+  });
+
+  it('Tab order stays sane: Shift+Tab goes back to the button, Tab moves on and closes it, focus stays in Settings', async () => {
+    await start();
+    await openSettings();
+    await focusButton();
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    await page.press('Tab', { shift: true });
+    expect(await focused()).toBe('info-button');
+    expect(await page.evaluate<boolean>(popoverOpen)).toBe(true); // still its own button
+    await page.press('Enter'); // closes (toggle)
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    await page.press('Tab');
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    expect(await page.evaluate<boolean>(`document.getElementById('settings-sheet').contains(document.activeElement)`)).toBe(true);
+    expect(await settingsOpen()).toBe(true);
+    // Closing Settings with the popover open closes it too.
+    await focusButton();
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    await clickOn('.settings-close');
+    await page.waitFor(`document.getElementById('settings').hidden`, 2000);
+    expect(await page.evaluate<boolean>(popoverOpen)).toBe(false);
+    expect(app!.errors).toEqual([]);
+  });
+
+  it('stays inside the window, never clipped, from 480 to 1400 px and in short windows (it scrolls inside itself), and respects reduced motion', async () => {
+    await start();
+    await openSettings();
+    const SIZES: [number, number][] = [[480, 900], [600, 900], [601, 900], [860, 900], [960, 900], [1000, 900], [1240, 900], [1241, 900], [1400, 900], [1000, 400], [480, 400], [1400, 400]];
+    for (const [w, h] of SIZES) {
+      await app!.resize(w, h);
+      await settle(250);
+      await page.evaluate(`document.querySelector('#settings-location .info-button').scrollIntoView({ block: 'center' })`);
+      await settle(100);
+      await clickOn('#settings-location .info-button');
+      await page.waitFor(popoverOpen, 2000);
+      await settle(200);
+      const box = await page.evaluate<{ problems: string[]; scrolls: boolean }>(`(() => {
+        const p = document.getElementById('location-info');
+        const r = p.getBoundingClientRect();
+        const area = document.getElementById('settings-sections').getBoundingClientRect();
+        const out = [];
+        if (r.left < 15.5 || r.right > innerWidth - 15.5) out.push('sides ' + r.left + '..' + r.right + ' of ' + innerWidth);
+        if (r.top < area.top + 15.5 || r.bottom > innerHeight - 15.5) out.push('height ' + r.top + '..' + r.bottom + ' of ' + area.top + '..' + innerHeight);
+        if (r.width < 200) out.push('too narrow ' + r.width);
+        // Not covered and not clipped: the points just inside each edge belong to the popover.
+        for (const [x, y] of [[r.left + 20, r.top + 20], [r.right - 20, r.top + 20], [r.left + 20, r.bottom - 20], [r.right - 20, r.bottom - 20]]) {
+          if (!p.contains(document.elementFromPoint(x, y))) out.push('covered or clipped at ' + Math.round(x) + ',' + Math.round(y));
+        }
+        if (p.scrollWidth > p.clientWidth + 1) out.push('horizontal scroll inside');
+        if (document.getElementById('settings-sections').scrollWidth > document.getElementById('settings-sections').clientWidth + 1) out.push('sections scroll sideways');
+        // The panel itself never moves: only its sections scroll (an absolute or fixed child sticking out once let it shift).
+        const root = document.getElementById('settings');
+        if (root.scrollTop !== 0 || root.scrollLeft !== 0 || document.getElementById('settings-sheet').getBoundingClientRect().top !== 0) out.push('panel shifted');
+        if (root.scrollHeight > root.clientHeight || root.scrollWidth > root.clientWidth) out.push('panel can scroll');
+        return { problems: out, scrolls: p.scrollHeight > p.clientHeight + 1 };
+      })()`);
+      expect(box.problems, `${w}x${h}`).toEqual([]);
+      if (box.scrolls) {
+        // It does not fit: its own content scrolls, all the way to the last line.
+        await page.evaluate(`document.getElementById('location-info').scrollTop = 1e6`);
+        expect(
+          await page.evaluate<boolean>(`(() => { const p = document.getElementById('location-info'), li = p.querySelector('li:last-child'); return li.getBoundingClientRect().bottom <= p.getBoundingClientRect().bottom + 1; })()`),
+          `${w}x${h}`,
+        ).toBe(true);
+      }
+      await page.press('Escape');
+      await page.waitFor(`!(${popoverOpen})`, 2000);
+      // Closed again, with the sections scrolled to the top: still nothing for the panel itself to scroll.
+      await page.evaluate(`document.getElementById('settings-sections').scrollTop = 0`);
+      expect(
+        await page.evaluate<number[]>(`(() => { const r = document.getElementById('settings'); return [r.scrollTop, r.scrollHeight - r.clientHeight]; })()`),
+        `${w}x${h} closed`,
+      ).toEqual([0, 0]);
+    }
+    // Focused, then the sections scrolled away (the button is out of sight): Enter still opens it, next to the button brought back into view.
+    await focusButton();
+    await page.evaluate(`document.getElementById('settings-sections').scrollTop = 0`);
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    expect(
+      await page.evaluate<boolean>(`(() => { const b = document.querySelector('#settings-location .info-button').getBoundingClientRect(), a = document.getElementById('settings-sections').getBoundingClientRect(); return b.top >= a.top && b.bottom <= a.bottom; })()`),
+    ).toBe(true);
+    expect(await page.evaluate<number>(`document.getElementById('settings').scrollTop`)).toBe(0);
+    await page.press('Escape');
+    await page.waitFor(`!(${popoverOpen})`, 2000);
+    // Reduced motion: no fade-in animation.
+    await page.emulateReducedMotion(true);
+    await page.press('Enter');
+    await page.waitFor(popoverOpen, 2000);
+    expect(await page.evaluate<string>(`getComputedStyle(document.getElementById('location-info')).animationName`)).toBe('none');
+    await page.emulateReducedMotion(false);
+    await page.press('Escape');
+    expect(app!.errors).toEqual([]);
   });
 });

@@ -11,6 +11,8 @@ export type CardWeather =
 interface Handlers {
   onSelect: (p: Place) => void;
   onRemoveFavorite: (p: Place) => void;
+  /** The "×" on a recent card (or Delete on it): forget that one city. */
+  onRemoveRecent: (p: Place) => void;
   onClearRecent: () => void;
 }
 
@@ -24,7 +26,7 @@ export function setupSidebar(h: Handlers): void {
       const card = target.closest<HTMLElement>('.place-card[data-id]');
       const place = card && places.get(Number(card.dataset.id));
       if (!place) return;
-      if (target.closest('.fav-remove')) h.onRemoveFavorite(place);
+      if (target.closest('.fav-remove')) (card.classList.contains('recent') ? h.onRemoveRecent : h.onRemoveFavorite)(place);
       else h.onSelect(place);
     });
     list.addEventListener('keydown', (e) => {
@@ -36,6 +38,8 @@ export function setupSidebar(h: Handlers): void {
         h.onSelect(place);
       } else if (e.key === 'Delete' && card.classList.contains('fav')) {
         h.onRemoveFavorite(place);
+      } else if (e.key === 'Delete' && card.classList.contains('recent')) {
+        h.onRemoveRecent(place);
       }
     });
   }
@@ -53,6 +57,11 @@ function weatherBadge(w: CardWeather | undefined): string {
   return `${weatherIcon(info.icon, w.isDay, 'wx-icon fav-icon')}<span>${round(w.temperature)}°</span>`;
 }
 
+/** The "×" in a favorite or recent card's corner, shown on hover and keyboard focus. "Your location" has none. */
+function removeButton(label: string): string {
+  return `<button type="button" class="fav-remove" title="${esc(label)}" aria-label="${esc(label)}">${glyphs.close}</button>`;
+}
+
 function card(p: Place, kind: 'loc' | 'fav' | 'recent', activeId: number | null, weather: CardWeather | undefined): string {
   const active = p.id === activeId;
   const label = [p.name, p.admin1, p.country].filter(Boolean).join(', ');
@@ -65,11 +74,7 @@ function card(p: Place, kind: 'loc' | 'fav' | 'recent', activeId: number | null,
           <span class="fav-sub muted small">${esc(subtitle(p))}</span>
         </div>
         <div class="fav-weather">${weatherBadge(weather)}</div>
-        ${
-          kind === 'fav'
-            ? `<button type="button" class="fav-remove" title="Remove ${esc(p.name)} from favorites" aria-label="Remove ${esc(p.name)} from favorites">${glyphs.close}</button>`
-            : ''
-        }
+        ${kind === 'loc' ? '' : removeButton(`Remove ${p.name} from ${kind === 'fav' ? 'favorites' : 'recent'}`)}
       </div>
     </li>`;
 }
