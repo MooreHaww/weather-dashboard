@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.6.0-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.6.1-orange?style=for-the-badge)
 
 | ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -88,8 +88,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (379 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (211 tests, needs internet) |
+| `npm test` | Unit and API tests (384 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (212 tests, needs internet) |
 | `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (11 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
@@ -163,7 +163,7 @@ Electron main process
 - **Local JSON file, not MongoDB Atlas.** A cloud database needs a connection string, and anyone can unpack an Electron app and read it. It would also send each user's private data to a shared database and need internet just to show favorites. A local file needs no account, works offline and uninstalls cleanly. Writes are atomic, so a crash cannot leave a half-written file.
 - **Security.** The window runs sandboxed with context isolation and no Node access. A strict Content Security Policy blocks outside scripts. The server only answers requests addressed to `127.0.0.1` or `localhost` (this blocks DNS-rebinding attacks). All API text is HTML-escaped. The page can send two messages to the main process, both with no arguments. "Update now" is ignored unless an update has been downloaded; "Check for updates" is ignored in a build that does not update itself, while an update is downloading or ready, while a check runs, and within 30 seconds of the last one. Both are ignored unless they come from the app's own window and top frame, loaded from the local server.
 - **Location by IP, in the server, behind a switch.** The lookup runs in the local Express server, not in the page, so the page's Content Security Policy did not change. The server refuses it unless the saved setting says you allowed it (the page cannot skip that), makes one plain request (no cookies, no identifiers, a generic `User-Agent`, 5 seconds, no retry, no redirects), keeps only the city, country, coordinates rounded to about 1 km and the timezone from the answer after checking each, and never stores or logs the IP address. The detected place has its own id (-1) so it can never end up in favorites, recent cities or the next start's city.
-- **Glass (v1.6): Windows draws it, the page only tints it.** The window uses Electron's `backgroundMaterial: 'acrylic'` with a fully transparent window colour (not `transparent: true`: a fully transparent window was tried and lost double-click maximize, Win+arrow snapping, the snap layouts, rounded corners and the shadow). Acrylic was chosen over mica because it blurs whatever is behind the window, live; mica only samples the desktop wallpaper. The main process decides at start (and again when Windows' accessibility settings change, or when the window gets focus) and tells the page "glass" or "solid"; the page can only listen. Over the glass the page draws only a light wash in the weather's colour (alpha 0.12 to 0.35; one CSS value, `--wash-strength`, sets how strong it is). The boxes have a dark fill of 0.65 with blur, a thin light edge and an inner glow, the same in every weather. Contrast rule for everything on a box: main text and numbers 4.5:1 over a mid-grey and a dark desktop and 3:1 over white; secondary text and graphics 3:1 over grey and dark. Windows' own acrylic tint is not counted on. Behind the open Settings panel the dashboard is blurred by a CSS `filter` on the dashboard itself: the panel's `backdrop-filter` left the dashboard text sharp over the see-through page.
+- **Glass (v1.6): Windows draws it, the page only tints it.** The window uses Electron's `backgroundMaterial: 'acrylic'` with a fully transparent window colour (not `transparent: true`: a fully transparent window was tried and lost double-click maximize, Win+arrow snapping, the snap layouts, rounded corners and the shadow). Acrylic was chosen over mica because it blurs whatever is behind the window, live; mica only samples the desktop wallpaper. The main process decides at start (and again when Windows' accessibility settings change, or when the window gets focus) and tells the page "glass" or "solid"; the page can only listen. Over the glass the page draws only a light wash in the weather's colour (alpha 0.12 to 0.35; one CSS value, `--wash-strength`, sets how strong it is). The boxes have a flat dark fill of 0.65 with blur, a thin light edge and an inner glow, the same in every weather (a soft gradient on top of each box was removed in 1.6.1: Chromium dithers gradients, and that was the fine shimmer over the boxes). The sidebar's Your location, Favorites and Recent lists are plain rows on the bare glass, as in the plain look, not boxes. Contrast rule for everything on a box: main text and numbers 4.5:1 over a mid-grey and a dark desktop and 3:1 over white; secondary text and graphics 3:1 over grey and dark. Windows' own acrylic tint is not counted on. Behind the open Settings panel the dashboard is blurred by a CSS `filter` on the dashboard itself: the panel's `backdrop-filter` left the dashboard text sharp over the see-through page.
 - **Cache.** Coordinates are rounded to about 1 km so the same city always reuses one entry, and two identical simultaneous requests share one call to Open-Meteo.
 
 **How it is tested**
@@ -230,7 +230,7 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - **Windows only:** there is only a Windows installer.
 - **Location by IP is approximate:** it can be a city away, or the place of your provider or VPN. "Your location" has no star, because it is looked up again at each start instead of being saved as a favorite.
 - **Glass needs Windows 11 22H2 or newer:** the full glass effect needs Windows 11 22H2 or newer, with "Transparency effects" on in Windows. Otherwise (Windows 10, older Windows 11, transparency effects off, high contrast, reduced transparency) the app shows the plain dark look. While the window is not focused, Windows shows a flat grey instead of the glass.
-- **Text on bare glass over a very bright wallpaper:** the app name, the sidebar section titles, the empty-list lines and the footer sit on the glass with only a text shadow, so over a very bright wallpaper or window they can be hard to read. Text on the boxes stays readable.
+- **Text on bare glass over a very bright wallpaper:** the app name, the sidebar section titles, the empty-list lines and the footer sit on the glass with only a text shadow, so over a very bright wallpaper or window they can be hard to read. Text on the boxes stays readable. The sidebar rows are on bare glass too: city names and numbers keep 4.5:1 over black and a dark window, but over a light weather wash on a mid-grey desktop they can fall under 3:1.
 - **Daylight-saving hour labels:** in the week before a clock change, the hours after the change are labelled one hour off (see [Code review (v1.4.5)](#code-review-v145)).
 
 ## 🗺️ Roadmap
@@ -318,6 +318,9 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - [x] Make the full background 100% liquid glass with blur, and anything that needs a box gets extra blur behind it
 
 #### v1.6 (Fixes)
+- [x] Sidebar shows lists again in the glass look (1.6.1)
+- [x] Glass polish (blur, glow and edges) (1.6.1)
+- [x] Update row no longer flickers after Check for updates (1.6.1)
 
 ### v1.7 - Background mode
 - [ ] Close-button choice: exit completely, or keep running in the background (which keeps the widget alive)

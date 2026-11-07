@@ -778,14 +778,13 @@ a:hover { text-decoration: underline; }
    1. The outer glass is nearly clear: what is behind the window (blurred by Windows' acrylic) shows through a wash that follows the shown city's weather (body[data-sky],
       src/shared/sky.ts), scaled by --wash-strength. Text on it (app name, sidebar titles, empty lines, the footer) gets a soft text shadow.
    2. The boxes (cards, sidebar cards, the search field, overlays, the Settings sheet) are translucent dark glass:
-      one smoke fill, the same in every weather, a soft top sheen, a thin light edge and an inner glow. The desktop
+      one smoke fill, the same in every weather, a thin light edge and an inner glow (no gradient fill: see 1.6.1 below). The desktop
       shows through them, softened.
    tests/glassContrast.test.ts checks what sits on a box against CLEAR_RULE (src/shared/contrast.ts). */
 
 @media (forced-colors: none) and (prefers-reduced-transparency: no-preference) {
   html[data-material='glass'] {
     --box-fill: rgba(13, 17, 27, 0.65); /* translucent dark smoke, the same in every weather */
-    --box-sheen: rgba(255, 255, 255, 0.05); /* soft gradient at the top of each box */
     --glass-blur: blur(30px) saturate(170%);
     --glass-section: rgba(255, 255, 255, 0.04);
     --glass-edge: rgba(255, 255, 255, 0.16);
@@ -796,7 +795,6 @@ a:hover { text-decoration: underline; }
     --link: #bcd8fe;
     --wet: #c2e1ff; /* "likely" rain text and a wet day's chance */
     --today: #dbe8ff; /* today's name in the forecast */
-    --pc-over: transparent; /* a sidebar card's hover or active colour, over its glass */
     /* How strong the weather wash is: every state's alpha (and glow) is multiplied by this, capped at 0.35. */
     --wash-strength: 3;
     --settings-blur: blur(40px) saturate(180%); /* the dashboard behind an open Settings panel */
@@ -840,14 +838,16 @@ a:hover { text-decoration: underline; }
   html[data-material='glass'] .sidebar > section > p,
   html[data-material='glass'] .footer { text-shadow: var(--glass-text-shadow); }
 
-  /* 2. One translucent glass for every box: smoke with a top sheen, blur and saturation, a thin light edge, an inner glow. */
+  /* 2. One translucent glass for every box: smoke, blur and saturation, a thin light edge, an inner glow. */
   html[data-material='glass'] .card,
   html[data-material='glass'] .location-consent,
   html[data-material='glass'] .update-note,
   html[data-material='glass'] .confirm-box,
   html[data-material='glass'] .info-popover,
   html[data-material='glass'] .settings-sheet {
-    background: linear-gradient(180deg, var(--box-sheen), transparent 60%), var(--box-fill);
+    /* 1.6.1: a flat fill. The soft top sheen (a 5 % white gradient) was the grain on screen: Chromium dithers gradients, which put
+       a fine shimmer over every box (local noise 0.33 -> 0.01 without it). */
+    background: var(--box-fill);
     border-color: var(--glass-edge);
     backdrop-filter: var(--glass-blur);
   }
@@ -862,7 +862,7 @@ a:hover { text-decoration: underline; }
      transparent page that copy is mostly transparent, so the sharp dashboard showed through it (1.5.1's page was
      opaque, so its copy covered everything). The sheet itself is a dark scrim; its rows are boxes. */
   html[data-material='glass'] .settings-sheet {
-    background: linear-gradient(180deg, var(--box-sheen), transparent 60%), var(--settings-scrim);
+    background: var(--settings-scrim);
     backdrop-filter: none;
     box-shadow: inset 0 0 0 1px var(--glass-edge), var(--glass-shine), inset 0 0 90px rgba(255, 255, 255, 0.05);
   }
@@ -876,17 +876,11 @@ a:hover { text-decoration: underline; }
   html[data-material='glass'] body:has(> .settings.is-open) .titlebar .brand,
   html[data-material='glass'] body:has(> .settings.is-open) .titlebar .search,
   html[data-material='glass'] body:has(> .settings.is-open) #settings-button { visibility: hidden; }
-  /* Sidebar cards: the same glass; hover and active colours go over it (an inset ring, not a border, so no size change). */
-  html[data-material='glass'] .sidebar .place-card {
-    background: linear-gradient(var(--pc-over), var(--pc-over)), linear-gradient(180deg, var(--box-sheen), transparent 60%), var(--box-fill);
-    box-shadow: inset 0 0 0 1px var(--glass-edge), var(--glass-glow);
-    backdrop-filter: var(--glass-blur);
-  }
-  html[data-material='glass'] .sidebar .place-card:hover { --pc-over: var(--card-hover); }
-  html[data-material='glass'] .sidebar .place-card.is-active { --pc-over: rgba(96, 165, 250, 0.14); }
-  html[data-material='glass'] .sidebar .place-card.fav.is-active { --pc-over: rgba(251, 191, 36, 0.1); }
-  html[data-material='glass'] .sidebar .place-card.loc:hover { --pc-over: rgba(167, 139, 250, 0.08); }
-  html[data-material='glass'] .sidebar .place-card.loc.is-active { --pc-over: rgba(167, 139, 250, 0.1); }
+  /* Sidebar lists (1.6.1): "Your location", Favorites and Recent are plain rows on the bare glass, as in the classic look: no box, border or
+     shadow at rest (the base .place-card rules apply unchanged: hover tint, selected tint, accent bar). Only the text gets the soft shadow. */
+  html[data-material='glass'] .sidebar .place-card .fav-name,
+  html[data-material='glass'] .sidebar .place-card .fav-sub,
+  html[data-material='glass'] .sidebar .place-card .fav-weather { text-shadow: var(--glass-text-shadow); }
   /* The search field: the same glass. */
   html[data-material='glass'] .search input {
     background: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)), var(--box-fill);

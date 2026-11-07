@@ -176,10 +176,35 @@ export const CLEAR_RULE: Readonly<Record<ItemKind, Readonly<Record<string, numbe
   graphic: { grey: 3, black: 3, 'dark window': 3 },
 };
 
-/** The tightest backdrop for `fg` of kind `kind` over `layers`: the lowest ratio / need. */
-export function ruleCheck(fg: Rgba | string, layers: readonly Layer[], kind: ItemKind): { ratio: number; need: number; backdrop: string; margin: number } {
+/**
+ * Rows on the bare glass (the sidebar's lists, 1.6.1): no box behind them, so there is no dark fill to lean on.
+ * City names and numbers 4.5 over the dark desktops (black, #202020); secondary lines 3 over them. Mid-grey 3 for the
+ * primary text only where it is reachable: a row at rest with no weather wash (ROW_RULE). Hover's white tint, a light
+ * weather wash, and pure white are not guaranteed (ROW_RULE_WASHED has no grey). The accent bar and the weather icons
+ * are graphics, not text: not part of this rule.
+ */
+export const ROW_RULE: Readonly<Record<ItemKind, Readonly<Record<string, number>>>> = {
+  primary: { grey: 3, black: 4.5, 'dark window': 4.5 },
+  secondary: { black: 3, 'dark window': 3 },
+  graphic: {},
+};
+
+/** ROW_RULE without mid-grey: for rows under a weather wash or a hover tint. */
+export const ROW_RULE_WASHED: Readonly<Record<ItemKind, Readonly<Record<string, number>>>> = {
+  primary: { black: 4.5, 'dark window': 4.5 },
+  secondary: ROW_RULE.secondary,
+  graphic: {},
+};
+
+/** The tightest backdrop for `fg` of kind `kind` over `layers`: the lowest ratio / need. `rule` is CLEAR_RULE unless given. */
+export function ruleCheck(
+  fg: Rgba | string,
+  layers: readonly Layer[],
+  kind: ItemKind,
+  rule: Readonly<Record<ItemKind, Readonly<Record<string, number>>>> = CLEAR_RULE,
+): { ratio: number; need: number; backdrop: string; margin: number } {
   let worst = { ratio: Infinity, need: 0, backdrop: '', margin: Infinity };
-  for (const [name, need] of Object.entries(CLEAR_RULE[kind])) {
+  for (const [name, need] of Object.entries(rule[kind])) {
     const ratio = contrast(fg, compose(RULE_BACKDROPS[name]!, layers));
     if (ratio / need < worst.margin) worst = { ratio, need, backdrop: name, margin: ratio / need };
   }

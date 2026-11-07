@@ -385,9 +385,7 @@ describe('purple "Your location" and the pin (1.5.1)', () => {
     page.evaluate<{ bg: string; bar: string }>(`(() => {
       const c = document.querySelector(${JSON.stringify(selector)});
       const s = getComputedStyle(c);
-      // Glass (1.6): the card's own colour is the box fill; the hover/active tint is the first gradient layer (--pc-over).
-      const glass = document.documentElement.dataset.material === 'glass';
-      const tint = glass ? (s.backgroundImage.match(/^linear-gradient\\((rgba?\\([^)]*\\))/) || [])[1] : s.backgroundColor;
+      const tint = s.backgroundColor; // plain rows in glass too (1.6.1)
       return { bg: tint, bar: getComputedStyle(c, '::before').backgroundColor };
     })()`);
   const show = async (selector: string, name: string) => {

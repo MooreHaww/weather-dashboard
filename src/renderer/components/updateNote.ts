@@ -15,7 +15,7 @@
 
 import { $, esc } from '../dom';
 import { glyphs } from '../icons';
-import { describeUpdate, parseUpdateState, sameUpdateState, type UpdateState } from '../../shared/updateState';
+import { describeUpdate, parseUpdateState, sameUpdateState, type UpdateState, type UpdateText } from '../../shared/updateState';
 import type { TimeFormat } from '../../shared/types';
 import { onSettingsSync, settingsRow, settingsSection } from './settings';
 
@@ -76,8 +76,13 @@ export function setupUpdateReady(opts: { timeFormat?: () => TimeFormat } = {}): 
 
   let state: UpdateState | null = null;
   let painted = '';
+  let lastText: UpdateText | null = null; // the row's words before a check started
   function paint(): void {
-    const text = describeUpdate(state, __APP_VERSION__, timeFormat());
+    let text = describeUpdate(state, __APP_VERSION__, timeFormat());
+    // While a check runs only the button changes ("Checking…"). The row keeps the words it had, so it goes from "Checking…"
+    // straight to the result and never drops to a bare "Version X" in between.
+    if (text.check === 'checking' && lastText) text = { ...lastText, check: 'checking' };
+    else if (text.check !== 'checking') lastText = text;
     const key = JSON.stringify(text);
     if (key === painted) return; // the minute tick must not rebuild the row (the button may have focus)
     painted = key;

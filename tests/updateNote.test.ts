@@ -98,6 +98,31 @@ describe('the Updates section', () => {
     expect(label()).toBe('Version 1.4.8 is ready');
   });
 
+  it('a check keeps the row\'s words: only the button says "Checking…", then the result follows (no bare "Version X" in between, 1.6.1)', () => {
+    const at = new Date(2026, 9, 25, 10, 42).getTime();
+    const seen: string[] = [];
+    const snap = () => seen.push(`${label()} | ${document.getElementById('update-check')?.textContent}`);
+    state({ status: 'up-to-date', version: '1.4.7', checkedAt: at });
+    snap();
+    state({ status: 'checking', version: '1.4.7' });
+    snap();
+    state({ status: 'up-to-date', version: '1.4.7', checkedAt: at + 60_000 });
+    snap();
+    expect(seen).toEqual([
+      'Version 1.4.7 · Up to date · checked 10:42 AM | Check for updates',
+      'Version 1.4.7 · Up to date · checked 10:42 AM | Checking…',
+      'Version 1.4.7 · Up to date · checked 10:43 AM | Check for updates',
+    ]);
+    // From a failed check the words stay too; from nothing (idle) there is only the version either way.
+    state({ status: 'failed', version: '1.4.7' });
+    state({ status: 'checking', version: '1.4.7' });
+    expect(detail()).toBe("Couldn't check for updates");
+    expect(document.getElementById('update-check')!.textContent).toBe('Checking…');
+    state({ status: 'idle', version: '1.4.7' });
+    state({ status: 'checking', version: '1.4.7' });
+    expect(label()).toBe('Version 1.4.7');
+  });
+
   it('ignores states that are not well formed, and the minute tick does not rebuild an unchanged row', () => {
     state({ status: 'failed', version: '1.4.7' });
     const row = updatesSection().querySelector('.settings-row');

@@ -13,7 +13,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 import { captureWindow, removeBackdrop, showBackdrop } from '../../scripts/screen';
-import { parseColor, ruleCheck, type ItemKind, type Layer, type Rgba } from '../../src/shared/contrast';
+import { parseColor, ROW_RULE, ROW_RULE_WASHED, ruleCheck, type ItemKind, type Layer, type Rgba } from '../../src/shared/contrast';
 import { SKIES } from '../../src/shared/sky';
 import { glassModel, WASH_MAX } from '../support/glassModel';
 import { BACKDROP, systemBackdropType, transparencyEffectsOn } from './support/dwm';
@@ -100,12 +100,12 @@ function layersOf(s: Stack, withTint: boolean): Layer[] {
 }
 
 /** The tightest CLEAR_RULE check of an element's own colour: with no outer wash and under the shown state's wash. */
-async function ruleOf(page: AppPage, selector: string, kind: ItemKind): Promise<{ ratio: number; need: number; backdrop: string; color: string } | null> {
+async function ruleOf(page: AppPage, selector: string, kind: ItemKind, rule?: typeof ROW_RULE, ruleWashed = rule): Promise<{ ratio: number; need: number; backdrop: string; color: string } | null> {
   const s = await page.evaluate<Stack | null>(`(${STACK})(${JSON.stringify(selector)})`);
   if (!s) return null;
   let worst = { ratio: Infinity, need: 0, margin: Infinity, backdrop: '', color: s.color };
   for (const withTint of [false, true]) {
-    const w = ruleCheck(s.color, layersOf(s, withTint), kind);
+    const w = ruleCheck(s.color, layersOf(s, withTint), kind, withTint ? ruleWashed : rule);
     if (w.margin < worst.margin) worst = { ...w, backdrop: `${w.backdrop} (${withTint ? 'wash' : 'no wash'})`, color: s.color };
   }
   return worst;
@@ -202,7 +202,7 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
     expect(app.errors).toEqual([]);
   });
 
-  it('boxes are translucent dark glass, the same in every weather: fill, blur and saturation, sheen, light edge, inner glow; no backing panels', async () => {
+  it('boxes are translucent dark glass, the same in every weather: fill, blur and saturation, light edge, inner glow; no backing panels', async () => {
     await app.evaluateMain(`${MAIN_WIN} win.webContents.send('update-ready', '9.9.9');`);
     await page.waitFor(`!document.getElementById('update-note').hidden`, 5000);
     type Look = { filter: string; bg: string; image: string; border: string; shadow: string; inset?: string };
@@ -210,7 +210,7 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
       page.evaluate<Record<string, Look | null>>(`(() => {
         const out = {};
         const boxes = { hero: ['#hero'], rain: ['#rain-chart', '.card'], temperature: ['#temp-chart', '.card'], forecast: ['#forecast', '.card'],
-          consent: ['#location-consent'], note: ['#update-note'], settings: ['.settings-sheet'], 'sidebar card': ['#favorites .place-card'] };
+          consent: ['#location-consent'], note: ['#update-note'], settings: ['.settings-sheet'] };
         for (const [name, [q, how]] of Object.entries(boxes)) {
           let el = document.querySelector(q);
           if (el && how === '.card') el = el.closest('.card');
@@ -226,10 +226,9 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
       // The Settings sheet is a dark scrim; the dashboard behind it is blurred by a filter on the dashboard (see the Settings tests).
       expect(l!.filter, name).toBe(name === 'settings' ? 'none' : 'blur(30px) saturate(1.7)');
       expect(l!.bg, name).toBe(name === 'settings' ? 'rgba(13, 17, 27, 0.55)' : 'rgba(13, 17, 27, 0.65)'); // translucent smoke: the desktop shows through
-      expect(l!.image, name).toContain('linear-gradient(rgba(255, 255, 255, 0.05)'); // the soft sheen at the top
+      expect(l!.image, name).toBe('none'); // a flat fill: no gradient (a gradient is dithered on screen: the grain 1.6.1 removed)
       expect(l!.shadow, name).toMatch(/inset/); // edge highlight and glow
-      if (name === 'sidebar card') expect(l!.shadow, name).toContain('rgba(255, 255, 255, 0.16) 0px 0px 0px 1px inset'); // an inset ring, no border
-      else if (name !== 'settings') expect(l!.border, name).toBe('rgba(255, 255, 255, 0.16)');
+      if (name !== 'settings') expect(l!.border, name).toBe('rgba(255, 255, 255, 0.16)');
     }
     // No backing panels: the title bar, the sidebar sections and the footer show the bare glass; their text has a shadow.
     const bare = await page.evaluate<Record<string, { bg: string; image: string; before: string }>>(`(() => {
@@ -258,13 +257,36 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
     expect(app.errors).toEqual([]);
   });
 
+  it('the sidebar lists are plain rows, as in the classic look: no box, border, shadow or blur at rest; a tint on hover, a tint and the accent bar when selected', async () => {
+    const look = (q: string) =>
+      page.evaluate<{ bg: string; image: string; border: string; shadow: string; filter: string; shadowText: string; bar: string }>(`(() => {
+        const el = document.querySelector(${JSON.stringify(q)}); const c = getComputedStyle(el);
+        return { bg: c.backgroundColor, image: c.backgroundImage, border: c.borderTopWidth, shadow: c.boxShadow, filter: c.backdropFilter,
+          shadowText: getComputedStyle(el.querySelector('.fav-name')).textShadow, bar: getComputedStyle(el, '::before').content };
+      })()`);
+    const rest = await look('#recent .place-card:not(.is-active)');
+    expect(rest).toMatchObject({ bg: TRANSPARENT, image: 'none', border: '0px', shadow: 'none', filter: 'none', bar: 'none' });
+    expect(rest.shadowText).toContain('rgba(0, 0, 0, 0.65)');
+    const active = await look('.place-card.is-active');
+    expect(active.bar).not.toBe('none');
+    expect(active.image).toBe('none');
+    expect(active.shadow).toBe('none');
+    expect(active.filter).toBe('none');
+    expect(active.bg).not.toBe(TRANSPARENT); // the clearer tint
+    // Hover: the same faint tint as the classic look.
+    const [hx, hy] = await page.evaluate<[number, number]>(`(() => { const r = document.querySelector('#recent .place-card:not(.is-active)').getBoundingClientRect(); return [r.x + 40, r.y + r.height / 2]; })()`);
+    await page.move(hx, hy);
+    await new Promise((r) => setTimeout(r, 300));
+    const hover = await look('#recent .place-card:not(.is-active)');
+    expect(hover.bg).toMatch(/^rgba\(255, 255, 255, 0\.08[56]\)$/); // --card-hover (0.085, as 8-bit alpha)
+    expect(hover).toMatchObject({ image: 'none', shadow: 'none', filter: 'none' });
+    await page.move(5, 700);
+    expect(app.errors).toEqual([]);
+  });
+
   it('text and graphics on the boxes in the real window meet CLEAR_RULE (primary 4.5 over grey and dark, 3 over white; secondary and graphics 3 over grey and dark), with and without the wash', async () => {
     const checks: [string, ItemKind][] = [
       ['#search-input', 'primary'],
-      ['#favorites .fav-name', 'primary'],
-      ['#favorites .fav-sub', 'secondary'],
-      ['#recent .place-card:not(.is-active) .fav-sub', 'secondary'],
-      ['.place-card.is-active .fav-name', 'primary'],
       ['.place-name', 'primary'],
       ['.clock-tz', 'secondary'],
       ['.stat-label', 'secondary'],
@@ -283,6 +305,15 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
       await showState(page, state);
       for (const [sel, kind] of checks) {
         const w = await ruleOf(page, sel, kind);
+        expect(w, sel).not.toBeNull();
+        expect(w!.ratio, `${state}: ${sel} (${kind}, ${w!.color}) over ${w!.backdrop}`).toBeGreaterThanOrEqual(w!.need);
+      }
+    }
+    // The sidebar's rows sit on the bare glass: ROW_RULE (names and numbers 4.5 over dark, 3 over grey at rest with no wash; secondary 3 over dark).
+    for (const state of states) {
+      await showState(page, state);
+      for (const [sel, kind] of [['#favorites .fav-name', 'primary'], ['#favorites .fav-sub', 'secondary'], ['#recent .place-card:not(.is-active) .fav-sub', 'secondary'], ['.place-card.is-active .fav-name', 'primary']] as [string, ItemKind][]) {
+        const w = await ruleOf(page, sel, kind, ROW_RULE, ROW_RULE_WASHED);
         expect(w, sel).not.toBeNull();
         expect(w!.ratio, `${state}: ${sel} (${kind}, ${w!.color}) over ${w!.backdrop}`).toBeGreaterThanOrEqual(w!.need);
       }

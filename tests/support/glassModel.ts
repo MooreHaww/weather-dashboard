@@ -6,7 +6,7 @@
 // Windows' acrylic gets no credit. Text on the bare glass (app name, sidebar titles, footer) has no box: bareGlass()
 // lists it for the report; the rule above is for boxes.
 
-import { compose, contrast, parseColor, ruleCheck, type ItemKind, type Layer, type Rgba } from '../../src/shared/contrast';
+import { compose, contrast, parseColor, ROW_RULE, ROW_RULE_WASHED, ruleCheck, type ItemKind, type Layer, type Rgba } from '../../src/shared/contrast';
 
 /** Custom properties of the first rule whose selector is exactly `selector`. */
 export function tokensOf(css: string, selector: string): Record<string, string> {
@@ -48,6 +48,8 @@ export interface GlassModel {
   places(boxAlpha?: number): Record<string, Place>;
   /** Text and graphics on the bare glass (no box), for the report. */
   bareGlass(): Item[];
+  /** The sidebar's rows on the bare glass (1.6.1): only the row's own tint, if any, over the desktop and the wash. Checked against ROW_RULE. */
+  rows(): Record<string, Place>;
   /** What lies between the desktop and the boxes: nothing, or a state's wash and its glow at full strength. */
   outer(state: string | null): Layer[];
 }
@@ -92,10 +94,9 @@ export function glassModel(css: string, chartsSource: string): GlassModel {
 
   const places = (boxAlpha = boxFill.a): Record<string, Place> => {
     const fill: Rgba = { ...boxFill, a: boxAlpha };
-    const sheen = g('--box-sheen');
-    const BOX: Layer[] = [sat(g('--glass-blur')), fill, sheen]; // cards, sidebar cards, search field, overlays
+    const BOX: Layer[] = [sat(g('--glass-blur')), fill]; // cards, sidebar cards, search field, overlays
     // Settings: a fixed dark scrim (not the box fill) over the blurred dashboard; its rows are boxes on it.
-    const SHEET: Layer[] = [g('--settings-scrim'), sheen];
+    const SHEET: Layer[] = [g('--settings-scrim')];
     return {
       'search field': {
         layers: [...BOX, 'rgba(255, 255, 255, 0.06)'],
@@ -103,23 +104,6 @@ export function glassModel(css: string, chartsSource: string): GlassModel {
       },
       'search field, hovered': { layers: [...BOX, 'rgba(255, 255, 255, 0.09)'], items: [P('typed text', text), S('placeholder', muted)] },
       'search results': { layers: ['rgba(20, 28, 46, 0.97)'], items: [P('city', text), S('country', muted)] },
-      'sidebar card': {
-        layers: BOX,
-        items: [P('city name', text), P('temperature', text), S('country', muted), G('sun icon', '#FFC83D'), G('cloud icon', '#E4EAF3'), G('"×"', muted)],
-      },
-      'sidebar card, hovered': { layers: [...BOX, root['--card-hover']!], items: [P('city name', text), S('country', muted)] },
-      'Recent card, active': {
-        layers: [...BOX, 'rgba(96, 165, 250, 0.14)'],
-        items: [P('city name', text), S('country', muted), G('blue bar', root['--accent']!)],
-      },
-      'Favorite card, active': {
-        layers: [...BOX, 'rgba(251, 191, 36, 0.1)'],
-        items: [P('city name', text), S('country', muted), G('gold bar', root['--gold']!)],
-      },
-      'Your location card, active': {
-        layers: [...BOX, 'rgba(167, 139, 250, 0.1)'],
-        items: [P('city name', text), S('country', muted), G('purple bar', root['--location']!)],
-      },
       card: {
         layers: BOX,
         items: [
@@ -161,10 +145,24 @@ export function glassModel(css: string, chartsSource: string): GlassModel {
     };
   };
 
+  const rows = (): Record<string, Place> => {
+    const names = (): Item[] => [P('city name', text), P('temperature', text), S('country', muted)];
+    const tint = (c: string): Layer[] => [c]; // the base .place-card rules, unchanged from the classic look
+    return {
+      'row, at rest': { layers: [], items: names() },
+      'row, hovered': { layers: tint(root['--card-hover']!), items: names() },
+      'Recent row, selected': { layers: tint('rgba(96, 165, 250, 0.14)'), items: names() },
+      'Favorite row, selected': { layers: tint('rgba(251, 191, 36, 0.1)'), items: names() },
+      'Your location row, selected': { layers: tint('rgba(167, 139, 250, 0.1)'), items: names() },
+      'Your location row, hovered': { layers: tint('rgba(167, 139, 250, 0.08)'), items: names() },
+    };
+  };
+
   return {
     boxFill,
     states,
     places,
+    rows,
     bareGlass: () => [
       P('app name', text),
       G('gear', text),
@@ -208,6 +206,24 @@ export function worstRatios(m: GlassModel, boxAlpha?: number): Ratio[] {
           if (!worst || w.margin < worst.margin) {
             worst = { place, item: item.name, kind: item.kind, ratio: w.ratio, need: w.need, margin: w.margin, where: `${state ?? 'no wash'}, over ${w.backdrop}` };
           }
+        }
+      }
+      out.push(worst!);
+    }
+  }
+  return out;
+}
+
+/** Every item of a sidebar row on the bare glass at its tightest point under ROW_RULE (no box: the desktop and the wash only). */
+export function worstRowRatios(m: GlassModel): Ratio[] {
+  const out: Ratio[] = [];
+  for (const [place, p] of Object.entries(m.rows())) {
+    for (const item of p.items) {
+      let worst: Ratio | null = null;
+      for (const state of [null, ...Object.keys(m.states)]) {
+        const w = ruleCheck(item.color, [...m.outer(state), ...p.layers], item.kind, state === null && place === 'row, at rest' ? ROW_RULE : ROW_RULE_WASHED);
+        if (!worst || w.margin < worst.margin) {
+          worst = { place, item: item.name, kind: item.kind, ratio: w.ratio, need: w.need, margin: w.margin, where: `${state ?? 'no wash'}, over ${w.backdrop}` };
         }
       }
       out.push(worst!);

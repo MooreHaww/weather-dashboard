@@ -1,0 +1,773 @@
+/* Weather Dashboard: dark, Windows 11-inspired theme */
+
+:root {
+  --bg: #0b1220;
+  --text: #e8edf5;
+  --muted: rgba(226, 232, 240, 0.62);
+  --card: rgba(255, 255, 255, 0.055);
+  --card-hover: rgba(255, 255, 255, 0.085);
+  --stroke: rgba(255, 255, 255, 0.09);
+  --stroke-strong: rgba(255, 255, 255, 0.16);
+  --divider: rgba(255, 255, 255, 0.08);
+  --accent: #60a5fa;
+  --accent-strong: #3b82f6;
+  --rain: #5ab0ff;
+  --gold: #fbbf24; /* favorites: the star and the favorite cards' accent bar */
+  --location: #a78bfa; /* your location: its card's accent bar and the pin in the main card */
+  --warn: #fbbf24;
+  --temp: #ffb547;
+  --feels: #c4b5fd;
+  --radius: 14px;
+  --titlebar: 52px;
+  --controls: 150px; /* width Windows uses for the minimize/maximize/close buttons */
+  --sidebar: 260px;
+  --sky-1: #1b2b4a;
+  --sky-2: #0e1729;
+  --glow: rgba(96, 165, 250, 0.18);
+  color-scheme: dark;
+}
+
+body[data-theme='clear-day'] { --sky-1: #1f4f8f; --sky-2: #0f2140; --glow: rgba(255, 196, 77, 0.22); }
+body[data-theme='clear-night'] { --sky-1: #1a1f4a; --sky-2: #070a1c; --glow: rgba(147, 160, 255, 0.16); }
+body[data-theme='cloudy-day'] { --sky-1: #2a3a55; --sky-2: #111a2b; --glow: rgba(203, 213, 225, 0.12); }
+body[data-theme='cloudy-night'] { --sky-1: #1c2436; --sky-2: #0a0f1a; --glow: rgba(148, 163, 184, 0.1); }
+body[data-theme^='rain'] { --sky-1: #1d3350; --sky-2: #0a1424; --glow: rgba(90, 176, 255, 0.2); }
+body[data-theme^='storm'] { --sky-1: #2b2445; --sky-2: #0b0915; --glow: rgba(196, 160, 255, 0.16); }
+body[data-theme^='snow'] { --sky-1: #36486a; --sky-2: #141c2e; --glow: rgba(220, 235, 255, 0.18); }
+body[data-theme^='fog'] { --sky-1: #343c4a; --sky-2: #13171e; --glow: rgba(226, 232, 240, 0.12); }
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* the .layout area below the title bar is the scroller */
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 520px at 78% -8%, var(--glow), transparent 70%),
+    radial-gradient(700px 500px at 0% 100%, rgba(59, 130, 246, 0.08), transparent 70%),
+    linear-gradient(160deg, var(--sky-1), var(--sky-2) 60%);
+  transition: background 600ms ease;
+}
+
+h1, h2, p { margin: 0; }
+button { font: inherit; color: inherit; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.muted { color: var(--muted); }
+.small { font-size: 12px; }
+
+.glyph { width: 16px; height: 16px; flex: none; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Visible to screen readers only (chart data tables). */
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* ---------- title bar (drag region; Windows draws the window controls on the right) ---------- */
+
+.titlebar {
+  height: var(--titlebar);
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 0 var(--controls) 0 18px; /* room for the window controls */
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 13px; letter-spacing: 0.01em; white-space: nowrap; }
+
+.search, .icon-button { -webkit-app-region: no-drag; }
+
+.titlebar-actions { display: flex; align-items: center; gap: 8px; }
+
+.search { position: relative; width: min(520px, 100%); justify-self: center; }
+
+.search input {
+  width: 100%;
+  height: 34px;
+  padding: 0 64px 0 36px;
+  border-radius: 8px;
+  border: 1px solid var(--stroke);
+  border-bottom-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font: inherit;
+  outline: none;
+  transition: background 150ms, border-color 150ms;
+}
+.search input::placeholder { color: var(--muted); }
+.search input:hover { background: rgba(255, 255, 255, 0.09); }
+.search input:focus { background: rgba(15, 23, 42, 0.85); border-bottom: 2px solid var(--accent); }
+
+.search-icon { position: absolute; left: 11px; top: 9px; color: var(--muted); pointer-events: none; display: flex; }
+.search-hint {
+  position: absolute; right: 8px; top: 7px;
+  font-size: 11px; line-height: 18px; font-family: inherit;
+  padding: 0 6px; border-radius: 4px;
+  color: var(--muted); border: 1px solid var(--stroke); background: rgba(255, 255, 255, 0.04);
+  pointer-events: none;
+}
+.search input:focus ~ .search-hint { display: none; }
+
+.search-results {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-strong);
+  background: rgba(20, 28, 46, 0.97);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.result {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+}
+.result .glyph { color: var(--muted); }
+.result.is-active, .result:hover { background: rgba(255, 255, 255, 0.08); }
+.result-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.result-name { font-weight: 600; }
+.search-message { padding: 10px; color: var(--muted); }
+
+.badge {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  padding: 2px 6px; border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08); color: var(--muted);
+}
+
+.segmented { display: flex; padding: 3px; gap: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--stroke); }
+.segmented button {
+  border: 0; background: transparent; cursor: pointer;
+  padding: 4px 12px; border-radius: 6px; font-weight: 600; color: var(--muted);
+}
+.segmented button[aria-pressed='true'] { background: var(--accent-strong); color: #fff; }
+.segmented button:not([aria-pressed='true']):hover { background: rgba(255, 255, 255, 0.07); color: var(--text); }
+
+/* ---------- layout ----------
+   One scroll container (.layout) below the title bar. Cards never shrink below
+   their content: when the window is short, the page scrolls instead. */
+
+.layout {
+  height: calc(100% - var(--titlebar));
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: var(--sidebar) minmax(0, 1fr);
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - var(--titlebar));
+  overflow-y: auto;
+  padding: 8px 14px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.content {
+  min-width: 0;
+  padding: 8px 24px 20px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.content > * { flex-shrink: 0; }
+
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card {
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  backdrop-filter: blur(30px) saturate(140%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 30px rgba(0, 0, 0, 0.18);
+}
+
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+
+/* loading shimmer while a city loads */
+.content.is-loading .card { position: relative; }
+.content.is-loading .card::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.05) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite linear;
+  pointer-events: none;
+}
+@keyframes shimmer { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+
+/* ---------- sidebar: favorite and recent city cards ---------- */
+
+.fav-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+
+.place-card {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+.place-card:hover { background: var(--card-hover); }
+.place-card.is-active { background: rgba(96, 165, 250, 0.14); }
+.place-card.is-active::before {
+  content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px;
+  border-radius: 3px; background: var(--accent);
+}
+/* Favorites use gold (like the star) so they read differently from recent cities. */
+.place-card.fav.is-active { background: rgba(251, 191, 36, 0.1); }
+.place-card.fav.is-active::before { background: var(--gold); }
+
+.fav-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.fav-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fav-weather { display: flex; align-items: center; gap: 4px; font-weight: 600; font-size: 15px; }
+.fav-icon { width: 28px; height: 28px; }
+.card-error { cursor: help; }
+.fav-remove {
+  position: absolute; right: 4px; top: 4px;
+  width: 20px; height: 20px; padding: 2px;
+  display: none; place-items: center;
+  border: 0; border-radius: 4px; background: rgba(15, 23, 42, 0.9); color: var(--muted); cursor: pointer;
+}
+.fav-remove .glyph { width: 14px; height: 14px; }
+.place-card:hover .fav-remove, .place-card:focus-within .fav-remove { display: grid; }
+.fav-remove:hover { color: #fff; background: #b91c1c; }
+
+.link-button {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  color: var(--accent); font-size: 12px; font-weight: 500;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.link-button:hover { text-decoration: underline; }
+
+/* ---------- banner and buttons ---------- */
+
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border-radius: 10px;
+  background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.35); color: #fde68a;
+}
+.banner[hidden] { display: none; }
+.button {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--stroke-strong); background: rgba(255, 255, 255, 0.08);
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+}
+.button:hover { background: rgba(255, 255, 255, 0.14); }
+.button:disabled { opacity: 0.6; cursor: default; }
+.button-primary { background: var(--accent-strong); border-color: rgba(255, 255, 255, 0.22); color: #fff; font-weight: 600; }
+.button-primary:hover { background: #4f8ff7; }
+
+/* ---------- hero (current conditions) ---------- */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.1fr) minmax(220px, 1fr) minmax(320px, 1.5fr);
+  gap: 24px;
+  align-items: center;
+  padding: 22px 24px;
+}
+
+.hero-place, .hero-now { min-width: 0; }
+.place-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.place-name {
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  font-size: 28px; font-weight: 600; letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.star {
+  border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: 6px;
+  color: var(--muted); display: grid; place-items: center; flex: none;
+}
+.star .glyph { width: 20px; height: 20px; }
+.star:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.star[aria-pressed='true'] { color: var(--gold); }
+.star[aria-pressed='true'] .glyph { fill: currentColor; }
+
+.clock { margin-top: 16px; }
+.clock-time {
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+}
+.clock-date { font-size: 14px; margin-top: 2px; }
+.clock-tz { margin-top: 4px; }
+
+.hero-now { display: flex; align-items: center; gap: 14px; }
+.hero-icon { width: 104px; height: 104px; flex: none; filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.3)); }
+.hero-temp {
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  font-size: 64px; font-weight: 600; line-height: 1; letter-spacing: -0.03em;
+}
+.hero-temp .unit { font-size: 22px; font-weight: 500; vertical-align: top; margin-left: 4px; color: var(--muted); letter-spacing: 0; }
+.hero-cond { font-size: 17px; font-weight: 600; margin: 6px 0 2px; }
+
+/* Stats: no boxes. Icon + label, a larger value, then a detail line; thin
+   dividers between columns and rows instead of borders around each stat. */
+.hero-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; min-width: 0; }
+.stat { min-width: 0; padding: 10px 16px; }
+.stat-label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.stat-label .glyph { width: 15px; height: 15px; }
+.stat-value { font-size: 22px; font-weight: 600; margin-top: 4px; line-height: 1.2; white-space: nowrap; }
+.stat-value small { font-size: 12px; font-weight: 500; color: var(--muted); }
+.stat-sub { display: flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wind-arrow { width: 12px; height: 12px; flex: none; color: var(--accent); }
+
+/* Dividers: a line on the left of every stat that is not first in its row, and on
+   top of every stat that is not in the first row; none after the last column or row.
+   The three layouts (3, 6 and 2 columns) each have their own block under "responsive"
+   below, and their media queries never overlap, so no rule from one layout can
+   out-rank or leak into another (an overlap once left wrong or missing lines). */
+
+/* ---------- rain and temperature cards ---------- */
+
+.chart-card { display: flex; flex-direction: column; min-height: 300px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.card-header .section-title { margin-bottom: 4px; }
+
+/* The chart fills whatever height the card has; the canvas is taken out of
+   flow so it never pushes the card taller (no resize feedback loop). */
+.chart-wrap { position: relative; flex: 1 1 auto; min-height: 180px; margin-top: 10px; }
+.chart-wrap canvas { position: absolute; inset: 0; }
+
+.rain-summary, .temp-summary { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 600; min-height: 24px; }
+.rain-summary .glyph { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.rain-summary.is-likely { color: #9fd1ff; }
+.rain-summary.is-likely .glyph { color: var(--rain); }
+.rain-summary.is-chance .glyph { color: var(--rain); }
+.temp-summary { color: var(--text); }
+
+.legend { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid var(--temp); }
+.swatch-feels { border-top: 2px dashed var(--feels); }
+
+/* Hourly strip under the temperature chart: one row. JS places every item by the chart's own
+   x positions (see positionStrip) and sets each item's width inline. */
+.hour-strip { position: relative; height: 66px; margin-top: 6px; }
+.hour {
+  position: absolute; top: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  font-size: 11.5px;
+}
+.hour[hidden] { display: none; }
+.hour-time { color: var(--muted); white-space: nowrap; }
+.hour-icon { width: 28px; height: 28px; }
+.hour-temp { font-weight: 600; font-size: 13px; }
+
+/* The "current time" dot: a yellow centre with a white ring, and an outer hollow yellow ring that
+   pulses like a live indicator. Used on the chart (#now-dot, moved by JS) and in the legend. The
+   pulse is a CSS animation on the ring only, so it never redraws the chart. */
+.pulse-dot { position: relative; display: inline-block; width: 12px; height: 12px; flex: none; }
+.pulse-dot[hidden] { display: none; }
+.pulse-dot .core {
+  position: absolute; inset: 0; box-sizing: border-box; border-radius: 50%;
+  background: var(--temp); border: 2px solid rgba(255, 255, 255, 0.95);
+}
+.pulse-dot .ring {
+  position: absolute; inset: -5px; box-sizing: border-box; border-radius: 50%; pointer-events: none;
+  border: 1.5px solid var(--temp);
+  animation: now-pulse 2s ease-out infinite;
+}
+@keyframes now-pulse {
+  from { transform: scale(0.55); opacity: 0.9; }
+  to { transform: scale(1.5); opacity: 0; }
+}
+.now-dot { position: absolute; left: -6px; top: -6px; will-change: transform; }
+.legend > span[hidden] { display: none; }
+.legend .pulse-dot { margin: 0 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot .ring { animation: none; opacity: 0.55; transform: scale(1); }
+}
+
+/* ---------- 7-day forecast (a radio group of day cards) ---------- */
+
+.forecast { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+
+.day {
+  min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 14px 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  text-align: center;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms, transform 150ms;
+}
+.day:hover { background: var(--card-hover); transform: translateY(-2px); }
+.day.is-today .day-name { color: #bfdbfe; }
+.day[aria-checked='true'] {
+  border: 1px solid var(--accent);
+  background: rgba(96, 165, 250, 0.18);
+  box-shadow: 0 0 0 1px var(--accent) inset, 0 6px 18px rgba(59, 130, 246, 0.18);
+}
+.day:focus-visible { outline: 2px solid #fff; outline-offset: 2px; border-radius: 12px; }
+.day-name { font-weight: 600; font-size: 15px; }
+.day-icon { width: 52px; height: 52px; margin: 4px 0 0; }
+.day-cond { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.day-temps { display: flex; gap: 8px; align-items: baseline; font-size: 16px; }
+.range { position: relative; width: 80%; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); margin: 4px 0; }
+.range span { position: absolute; top: 0; bottom: 0; border-radius: 2px; background: linear-gradient(90deg, #60a5fa, #fbbf24); }
+.day-rain { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.day-rain .glyph { width: 13px; height: 13px; }
+.day-rain.is-wet { color: #9fd1ff; font-weight: 600; }
+
+/* ---------- footer ---------- */
+
+.footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; color: var(--muted); font-size: 12px; padding: 0 4px; }
+.updated { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* Saved data on screen because Open-Meteo could not be reached (same amber as the banner). */
+.offline-note { color: #fde68a; }
+.offline-note[hidden] { display: none; }
+.refresh { min-height: 34px; padding: 6px 16px; font-size: 14px; font-weight: 600; color: var(--text); border-radius: 8px; }
+.refresh-icon { display: flex; }
+.refresh .glyph { width: 18px; height: 18px; }
+.content.is-loading .refresh .glyph { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- responsive ---------- */
+
+/* Medium: current conditions in two columns, stats in one row of six. */
+@media (max-width: 1240px) {
+  .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .hero-stats { grid-column: 1 / -1; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1080px) {
+  :root { --sidebar: 220px; }
+  .forecast { gap: 6px; }
+  .day { padding: 12px 4px; }
+}
+
+/* Narrower: charts stack; stats back to 3 × 2. */
+@media (max-width: 960px) {
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .hero-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Single column: weather first, favorites and recent below it. */
+@media (max-width: 860px) {
+  .titlebar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; }
+  .brand span { display: none; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .content { order: 1; padding: 8px 16px 16px; }
+  .sidebar {
+    order: 2; position: static; max-height: none; overflow: visible;
+    padding: 0 16px 20px;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;
+  }
+  .forecast { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+}
+
+/* Phone-sized windows: everything in one column, stats in two. */
+@media (max-width: 600px) {
+  :root { --controls: 140px; }
+  .search-hint { display: none; }
+  .hero { grid-template-columns: minmax(0, 1fr); gap: 18px; padding: 18px; }
+  .hero-temp { font-size: 54px; }
+  .hero-icon { width: 84px; height: 84px; }
+  .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { padding: 16px; }
+  .legend { gap: 10px; }
+}
+
+/* Stat dividers, one block per layout. The ranges are exclusive on purpose. */
+
+/* 3 columns × 2 rows: wide windows (above 1240 px) and 601-960 px. */
+@media (min-width: 1241px), (min-width: 601px) and (max-width: 960px) {
+  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
+  .hero-stats .stat:nth-child(3n + 1) { padding-left: 0; border-left: 0; }
+  .hero-stats .stat:nth-child(n + 4) { border-top: 1px solid var(--divider); }
+}
+
+/* 6 columns × 1 row: 961-1240 px. */
+@media (min-width: 961px) and (max-width: 1240px) {
+  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
+  .hero-stats .stat:first-child { padding-left: 0; border-left: 0; }
+}
+
+/* 2 columns × 3 rows: 600 px and below. */
+@media (max-width: 600px) {
+  .hero-stats .stat { padding-left: 16px; border-left: 1px solid var(--divider); border-top: 0; }
+  .hero-stats .stat:nth-child(2n + 1) { padding-left: 0; border-left: 0; }
+  .hero-stats .stat:nth-child(n + 3) { border-top: 1px solid var(--divider); }
+}
+
+/* ---------- icon buttons (gear, settings close) ---------- */
+
+.icon-button {
+  width: 34px; height: 34px; flex: none;
+  display: grid; place-items: center;
+  border: 1px solid var(--stroke); border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06); color: var(--text);
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+}
+.icon-button:hover { background: rgba(255, 255, 255, 0.12); border-color: var(--stroke-strong); }
+.icon-button .glyph { width: 18px; height: 18px; }
+/* The gear is only the icon at rest (no background, border or highlight), same size and spot
+   as before so the Settings close button still lines up with it. Hover is a faint tint; the
+   keyboard focus ring is the global :focus-visible outline. */
+#settings-button { position: relative; background: transparent; border-color: transparent; }
+#settings-button:hover { background: rgba(255, 255, 255, 0.08); border-color: transparent; }
+/* Red dot on its top-right corner when an update is ready (components/updateNote.ts). No animation. */
+.update-dot {
+  position: absolute; top: 4px; right: 4px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #ef4444; box-shadow: 0 0 0 2px rgba(14, 23, 41, 0.9);
+  pointer-events: none;
+}
+
+/* ---------- settings panel ----------
+   A liquid-glass layer that covers the whole window and slides down from the
+   top. The dashboard behind it stays visible but frosted: strong backdrop blur,
+   a little extra saturation, a thin light edge and a soft inner glow. The header
+   lines up with the title bar, so the close button sits exactly where the gear
+   was and the Windows window buttons (drawn over the right --controls) stay
+   visible. */
+
+/* ---------- update note (bottom right, below the settings panel) ---------- */
+
+.update-note {
+  position: fixed; right: 16px; bottom: 16px; z-index: 50;
+  max-width: min(360px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 10px 10px 14px; border-radius: 12px;
+  background: rgba(30, 42, 70, 0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--stroke-strong);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-size: 13px; color: var(--text);
+}
+.update-note[hidden] { display: none; }
+.update-note-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.update-note-title { font-weight: 600; }
+.update-note-detail { font-size: 12px; color: var(--muted); }
+.update-note .icon-button { width: 28px; height: 28px; }
+.update-note .icon-button .glyph { width: 15px; height: 15px; }
+
+.settings { position: fixed; inset: 0; z-index: 100; overflow: hidden; }
+.settings[hidden] { display: none; }
+
+.settings-sheet {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(180deg, rgba(120, 145, 195, 0.22), rgba(30, 42, 70, 0.38));
+  backdrop-filter: blur(40px) saturate(180%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.2),      /* thin light edge */
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 0 90px rgba(255, 255, 255, 0.07);      /* soft inner glow */
+  transform: translateY(-100%);
+  opacity: 0;
+  transition: transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease;
+  outline: none;
+}
+.settings.is-open .settings-sheet { transform: translateY(0); opacity: 1; }
+
+.settings-header {
+  height: var(--titlebar); flex: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 0 var(--controls) 0 24px;
+  -webkit-app-region: drag; /* the window can still be moved while the panel is open */
+  user-select: none;
+}
+.settings-title {
+  min-width: 0;
+  font-family: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
+  font-size: 18px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* The only scroller: sections scroll when the window is short. */
+.settings-sections {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 8px 24px 32px;
+}
+.settings-sections > * { max-width: 720px; margin-inline: auto; }
+/* position: relative keeps the screen-reader hints (.sr-only, absolute) inside the scrolling sections; with the sheet as
+   their containing block they stuck out below it in a short window and let the panel itself be scrolled. */
+.settings-section { position: relative; }
+.settings-section + .settings-section { margin-top: 20px; }
+.settings-section-title { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0.02em; margin: 0 0 8px; }
+.settings-section-description { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
+.settings-section-body { border-radius: 14px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--stroke); }
+.settings-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding: 12px 16px; }
+.settings-row + .settings-row { border-top: 1px solid var(--divider); }
+.settings-row-text { min-width: 0; }
+.settings-row-label { font-weight: 600; }
+.settings-row-description { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.settings-row-control { flex: none; max-width: 100%; }
+.segmented { flex-wrap: wrap; -webkit-app-region: no-drag; }
+.segmented button { padding: 6px 14px; }
+.settings-row-control > .button { padding: 6px 16px; border-radius: 8px; }
+
+/* "Restart now?" over the Settings panel (components/updateNote.ts), in the same glass. */
+.confirm {
+  position: absolute; inset: 0; z-index: 1;
+  display: grid; place-items: center; padding: 16px;
+  background: rgba(8, 12, 24, 0.25);
+  outline: none;
+  animation: confirm-in 150ms ease;
+}
+.confirm-box {
+  width: min(360px, 100%);
+  padding: 20px; border-radius: 14px;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 60%),
+    rgba(30, 42, 70, 0.72);
+  backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 16px 40px rgba(0, 0, 0, 0.4);
+  -webkit-app-region: no-drag;
+}
+.confirm-title { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.confirm-text { color: var(--muted); }
+.confirm-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.confirm-actions .button { padding: 6px 16px; border-radius: 8px; }
+@keyframes confirm-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- location (v1.5): the consent card, "Your location", the Settings switch ---------- */
+
+/* Asked once in the sidebar, in the same glass as the Settings panel's dialogs. */
+.location-consent {
+  padding: 14px;
+  border-radius: var(--radius);
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 60%),
+    rgba(30, 42, 70, 0.55);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--stroke-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.location-consent[hidden], #location-section[hidden], #location-note[hidden] { display: none; }
+.location-consent-title { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+.location-consent-text { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.location-consent-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.location-consent-actions .button { padding: 6px 12px; border-radius: 8px; }
+
+/* The detected place is purple (like the pin in the main card), as subtle as the gold of a favorite. */
+.place-card.loc:hover { background: rgba(167, 139, 250, 0.08); }
+.place-card.loc.is-active { background: rgba(167, 139, 250, 0.1); }
+.place-card.loc.is-active::before { background: var(--location); }
+
+/* Next to the city name in the main card when the city shown is your location. */
+.loc-pin { display: grid; place-items: center; flex: none; padding: 6px; color: var(--location); }
+.loc-pin .glyph { width: 20px; height: 20px; }
+
+/* Settings > Location: the "i" button next to the switch and its popover (same glass as the dialogs). */
+.settings-row-control:has(.info-button) { display: flex; align-items: center; gap: 10px; }
+.info-button {
+  width: 24px; height: 24px; padding: 0; flex: none;
+  display: grid; place-items: center;
+  border: 1px solid var(--stroke-strong); border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08); color: var(--text);
+  font: italic 600 13px/1 Georgia, 'Times New Roman', serif;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.info-button:hover, .info-button[aria-expanded='true'] { background: rgba(255, 255, 255, 0.16); }
+.info-popover {
+  position: fixed; z-index: 2;
+  overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 16px; border-radius: 14px;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 60%),
+    rgba(30, 42, 70, 0.72);
+  backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--stroke-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 16px 40px rgba(0, 0, 0, 0.4);
+  -webkit-app-region: no-drag;
+  outline: none;
+  animation: confirm-in 120ms ease;
+}
+.info-popover[hidden] { display: none; }
+.info-popover-title { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+.info-popover-list { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text); }
+.info-popover-list li + li { margin-top: 6px; }
+
+/* On/off switch (role="switch"), used by Settings > Location. */
+.switch {
+  position: relative; flex: none;
+  width: 44px; height: 26px; padding: 0;
+  border: 1px solid var(--stroke-strong); border-radius: 13px;
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  transition: background 150ms;
+}
+.switch-knob {
+  position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff;
+  transition: transform 150ms;
+}
+.switch[aria-checked='true'] { background: var(--accent-strong); border-color: rgba(255, 255, 255, 0.22); }
+.switch[aria-checked='true'] .switch-knob { transform: translateX(18px); }
+
+/* "Check for updates" while a check runs: still focusable, but pressing it does nothing. */
+.button[aria-disabled='true'] { opacity: 0.6; cursor: default; }
+.button[aria-disabled='true']:hover { background: rgba(255, 255, 255, 0.08); }
+
+/* scrollbars like Windows 11 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(255, 255, 255, 0.24); }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* The settings panel does not slide: it fades in and out in place. */
+  .settings .settings-sheet,
+  .settings.is-open .settings-sheet { transform: none; transition: opacity 150ms ease !important; }
+}
+

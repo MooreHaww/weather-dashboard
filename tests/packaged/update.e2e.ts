@@ -431,7 +431,7 @@ describe('"Check for updates" in Settings', () => {
     await clickOn(page, '#update-check');
     await page.waitFor(`${buttonText} === 'Checking…'`, 5000);
     expect(await page.evaluate<string>(`${checkButton}.getAttribute('aria-disabled')`)).toBe('true');
-    expect(await page.evaluate<string>(updatesLabel)).toBe(`Version ${version}`); // nothing is claimed while it runs
+    expect(await page.evaluate<string>(updatesLabel)).toMatch(upToDate); // the row keeps its words while it runs (1.6.1): only the button changes
     expect(await page.evaluate<boolean>(`document.activeElement === ${checkButton}`)).toBe(true); // the click's focus is kept
     expect(feed!.checks()).toBe(2);
 
