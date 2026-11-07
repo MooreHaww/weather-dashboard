@@ -110,7 +110,10 @@ describe('settings panel', () => {
       const s = getComputedStyle(sheet);
       const b = sheet.getBoundingClientRect();
       return { left: b.left, top: b.top, right: b.right, bottom: b.bottom, vw: innerWidth, vh: innerHeight,
-        backdrop: s.backdropFilter, bg: s.backgroundImage, shadow: s.boxShadow, radius: s.borderTopLeftRadius,
+        // Solid: the sheet's own backdrop-filter. Glass (v1.6): a filter on the dashboard itself, because the sheet's
+        // backdrop-filter left the dashboard sharp over the see-through page (tests/e2e/glass.e2e.ts).
+        backdrop: document.documentElement.dataset.material === 'glass' ? getComputedStyle(document.querySelector('.layout')).filter : s.backdropFilter,
+        bg: s.backgroundImage, shadow: s.boxShadow, radius: s.borderTopLeftRadius,
         noScrim: document.querySelector('.settings-scrim') === null };
     })()`);
     // Covers the whole window (within a pixel: the slide-in easing may still be settling).
@@ -118,7 +121,7 @@ describe('settings panel', () => {
       expect(Math.abs(got - want)).toBeLessThan(1);
     }
     const blurPx = Number(/blur\(([\d.]+)px\)/.exec(r.backdrop as string)?.[1] ?? 0);
-    expect(blurPx).toBeGreaterThanOrEqual(30); // strong backdrop blur
+    expect(blurPx).toBeGreaterThanOrEqual(30); // strong blur of the dashboard
     expect(r.backdrop).toContain('saturate'); // a bit of saturation
     expect(r.bg).toContain('rgba'); // translucent glass layers
     expect(r.shadow).toContain('inset'); // light edge and inner glow

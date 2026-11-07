@@ -770,3 +770,137 @@ a:hover { text-decoration: underline; }
   .settings .settings-sheet,
   .settings.is-open .settings-sheet { transform: none; transition: opacity 150ms ease !important; }
 }
+
+/* ---------- glass (v1.6) ----------
+   Only when the main process chose glass (src/main/appearance.ts: Windows 11 22H2+, "Transparency effects" on),
+   and never under forced colours or reduced transparency: then everything above (the 1.5.1 look) applies unchanged.
+   The clear look:
+   1. The outer glass is nearly clear: what is behind the window (blurred by Windows' acrylic) shows through a wash that follows the shown city's weather (body[data-sky],
+      src/shared/sky.ts), scaled by --wash-strength. Text on it (app name, sidebar titles, empty lines, the footer) gets a soft text shadow.
+   2. The boxes (cards, sidebar cards, the search field, overlays, the Settings sheet) are translucent dark glass:
+      one smoke fill, the same in every weather, a soft top sheen, a thin light edge and an inner glow. The desktop
+      shows through them, softened.
+   tests/glassContrast.test.ts checks what sits on a box against CLEAR_RULE (src/shared/contrast.ts). */
+
+@media (forced-colors: none) and (prefers-reduced-transparency: no-preference) {
+  html[data-material='glass'] {
+    --box-fill: rgba(13, 17, 27, 0.65); /* translucent dark smoke, the same in every weather */
+    --box-sheen: rgba(255, 255, 255, 0.05); /* soft gradient at the top of each box */
+    --glass-blur: blur(30px) saturate(170%);
+    --glass-section: rgba(255, 255, 255, 0.04);
+    --glass-edge: rgba(255, 255, 255, 0.16);
+    --glass-shine: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    --glass-glow: inset 0 0 24px rgba(255, 255, 255, 0.04);
+    --glass-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65), 0 0 10px rgba(0, 0, 0, 0.45);
+    --muted: rgba(226, 232, 240, 0.78);
+    --link: #bcd8fe;
+    --wet: #c2e1ff; /* "likely" rain text and a wet day's chance */
+    --today: #dbe8ff; /* today's name in the forecast */
+    --pc-over: transparent; /* a sidebar card's hover or active colour, over its glass */
+    /* How strong the weather wash is: every state's alpha (and glow) is multiplied by this, capped at 0.35. */
+    --wash-strength: 3;
+    --settings-blur: blur(40px) saturate(180%); /* the dashboard behind an open Settings panel */
+    --settings-scrim: rgba(13, 17, 27, 0.55); /* the Settings panel's own dark layer over that blur */
+    /* Before the first weather arrives: overcast. */
+    --sky-tint: rgb(96, 102, 111); --sky-alpha: 0.075; --sky-glow: rgba(200, 206, 214, 0.03);
+  }
+  /* The outer glass per weather (code and is_day, src/shared/sky.ts): a faint wash of the tint, and a fainter glow. */
+  html[data-material='glass'] body[data-sky='clear-day'] { --sky-tint: rgb(255, 214, 140); --sky-alpha: 0.04; --sky-glow: rgba(255, 196, 90, 0.01); }
+  html[data-material='glass'] body[data-sky='partly-day'] { --sky-tint: rgb(188, 205, 222); --sky-alpha: 0.06; --sky-glow: rgba(170, 210, 255, 0.003); }
+  html[data-material='glass'] body[data-sky='overcast-day'] { --sky-tint: rgb(96, 102, 111); --sky-alpha: 0.075; --sky-glow: rgba(200, 206, 214, 0.03); }
+  html[data-material='glass'] body[data-sky='fog-day'] { --sky-tint: rgb(219, 219, 219); --sky-alpha: 0.055; --sky-glow: rgba(0, 0, 0, 0); }
+  html[data-material='glass'] body[data-sky='drizzle-day'] { --sky-tint: rgb(97, 146, 208); --sky-alpha: 0.07; --sky-glow: rgba(120, 170, 235, 0.05); }
+  html[data-material='glass'] body[data-sky='rain-day'] { --sky-tint: rgb(38, 94, 183); --sky-alpha: 0.09; --sky-glow: rgba(80, 150, 255, 0.06); }
+  html[data-material='glass'] body[data-sky='heavy-rain-day'] { --sky-tint: rgb(15, 52, 141); --sky-alpha: 0.12; --sky-glow: rgba(60, 110, 230, 0.06); }
+  html[data-material='glass'] body[data-sky='storm-day'] { --sky-tint: rgb(32, 32, 62); --sky-alpha: 0.14; --sky-glow: rgba(150, 130, 230, 0.05); }
+  html[data-material='glass'] body[data-sky='snow-day'] { --sky-tint: rgb(232, 244, 255); --sky-alpha: 0.043; --sky-glow: rgba(235, 246, 255, 0); }
+  html[data-material='glass'] body[data-sky='clear-night'] { --sky-tint: rgb(76, 52, 135); --sky-alpha: 0.07; --sky-glow: rgba(150, 130, 240, 0.06); }
+  html[data-material='glass'] body[data-sky='partly-night'] { --sky-tint: rgb(41, 51, 69); --sky-alpha: 0.08; --sky-glow: rgba(120, 150, 200, 0.04); }
+  html[data-material='glass'] body[data-sky='overcast-night'] { --sky-tint: rgb(37, 39, 42); --sky-alpha: 0.11; --sky-glow: rgba(150, 156, 166, 0.03); }
+  html[data-material='glass'] body[data-sky='fog-night'] { --sky-tint: rgb(144, 143, 140); --sky-alpha: 0.14; --sky-glow: rgba(0, 0, 0, 0); }
+  html[data-material='glass'] body[data-sky='drizzle-night'] { --sky-tint: rgb(20, 59, 109); --sky-alpha: 0.09; --sky-glow: rgba(90, 130, 200, 0.04); }
+  html[data-material='glass'] body[data-sky='rain-night'] { --sky-tint: rgb(5, 37, 97); --sky-alpha: 0.11; --sky-glow: rgba(60, 110, 220, 0.05); }
+  html[data-material='glass'] body[data-sky='heavy-rain-night'] { --sky-tint: rgb(0, 12, 55); --sky-alpha: 0.16; --sky-glow: rgba(40, 80, 200, 0.05); }
+  html[data-material='glass'] body[data-sky='storm-night'] { --sky-tint: rgb(14, 13, 32); --sky-alpha: 0.16; --sky-glow: rgba(120, 100, 210, 0.04); }
+  html[data-material='glass'] body[data-sky='snow-night'] { --sky-tint: rgb(120, 160, 190); --sky-alpha: 0.1; --sky-glow: rgba(190, 215, 250, 0.012); }
+
+  /* 1. The window area is the glass; the page only washes it with the weather. */
+  html[data-material='glass'],
+  html[data-material='glass'] body { background: transparent; }
+  html[data-material='glass'] .backdrop {
+    --wash-glow: rgb(from var(--sky-glow) r g b / min(0.35, alpha * var(--wash-strength)));
+    background:
+      radial-gradient(900px 520px at 82% -10%, var(--wash-glow), transparent 70%),
+      radial-gradient(700px 500px at 0% 100%, var(--wash-glow), transparent 70%),
+      rgb(from var(--sky-tint) r g b / min(0.35, var(--sky-alpha) * var(--wash-strength)));
+  }
+  /* Text on the bare glass: a soft shadow instead of a panel. */
+  html[data-material='glass'] .brand,
+  html[data-material='glass'] .sidebar .section-title,
+  html[data-material='glass'] .sidebar > section > p,
+  html[data-material='glass'] .footer { text-shadow: var(--glass-text-shadow); }
+
+  /* 2. One translucent glass for every box: smoke with a top sheen, blur and saturation, a thin light edge, an inner glow. */
+  html[data-material='glass'] .card,
+  html[data-material='glass'] .location-consent,
+  html[data-material='glass'] .update-note,
+  html[data-material='glass'] .confirm-box,
+  html[data-material='glass'] .info-popover,
+  html[data-material='glass'] .settings-sheet {
+    background: linear-gradient(180deg, var(--box-sheen), transparent 60%), var(--box-fill);
+    border-color: var(--glass-edge);
+    backdrop-filter: var(--glass-blur);
+  }
+  html[data-material='glass'] .card { box-shadow: var(--glass-shine), var(--glass-glow), 0 8px 30px rgba(0, 0, 0, 0.18); }
+  html[data-material='glass'] .location-consent { box-shadow: var(--glass-shine), var(--glass-glow); }
+  html[data-material='glass'] .update-note { box-shadow: var(--glass-shine), var(--glass-glow), 0 8px 24px rgba(0, 0, 0, 0.25); }
+  html[data-material='glass'] .confirm-box,
+  html[data-material='glass'] .info-popover { box-shadow: var(--glass-shine), var(--glass-glow), 0 16px 40px rgba(0, 0, 0, 0.4); }
+  html[data-material='glass'] .search-results { border-color: var(--glass-edge); box-shadow: var(--glass-shine), var(--glass-glow), 0 16px 40px rgba(0, 0, 0, 0.45); }
+  /* Settings: the dashboard behind the panel is blurred by a filter on the dashboard itself, not by the sheet's
+     backdrop-filter. Chromium draws a backdrop-filter's blurred copy OVER the original content; with the glass look's
+     transparent page that copy is mostly transparent, so the sharp dashboard showed through it (1.5.1's page was
+     opaque, so its copy covered everything). The sheet itself is a dark scrim; its rows are boxes. */
+  html[data-material='glass'] .settings-sheet {
+    background: linear-gradient(180deg, var(--box-sheen), transparent 60%), var(--settings-scrim);
+    backdrop-filter: none;
+    box-shadow: inset 0 0 0 1px var(--glass-edge), var(--glass-shine), inset 0 0 90px rgba(255, 255, 255, 0.05);
+  }
+  html[data-material='glass'] .settings-section-body { background: linear-gradient(var(--glass-section), var(--glass-section)), var(--box-fill); }
+  html[data-material='glass'] .layout,
+  html[data-material='glass'] .update-note { transition: filter 220ms ease; }
+  html[data-material='glass'] body:has(> .settings.is-open) > .layout,
+  html[data-material='glass'] body:has(> .settings.is-open) > .update-note { filter: var(--settings-blur); }
+  /* The app name and the search box would sit under the "Settings" title, and the gear under the panel's close button
+     (same spot): hidden (not removed, same places) while it is open. Closing removes .is-open before focusing the gear. */
+  html[data-material='glass'] body:has(> .settings.is-open) .titlebar .brand,
+  html[data-material='glass'] body:has(> .settings.is-open) .titlebar .search,
+  html[data-material='glass'] body:has(> .settings.is-open) #settings-button { visibility: hidden; }
+  /* Sidebar cards: the same glass; hover and active colours go over it (an inset ring, not a border, so no size change). */
+  html[data-material='glass'] .sidebar .place-card {
+    background: linear-gradient(var(--pc-over), var(--pc-over)), linear-gradient(180deg, var(--box-sheen), transparent 60%), var(--box-fill);
+    box-shadow: inset 0 0 0 1px var(--glass-edge), var(--glass-glow);
+    backdrop-filter: var(--glass-blur);
+  }
+  html[data-material='glass'] .sidebar .place-card:hover { --pc-over: var(--card-hover); }
+  html[data-material='glass'] .sidebar .place-card.is-active { --pc-over: rgba(96, 165, 250, 0.14); }
+  html[data-material='glass'] .sidebar .place-card.fav.is-active { --pc-over: rgba(251, 191, 36, 0.1); }
+  html[data-material='glass'] .sidebar .place-card.loc:hover { --pc-over: rgba(167, 139, 250, 0.08); }
+  html[data-material='glass'] .sidebar .place-card.loc.is-active { --pc-over: rgba(167, 139, 250, 0.1); }
+  /* The search field: the same glass. */
+  html[data-material='glass'] .search input {
+    background: linear-gradient(rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.06)), var(--box-fill);
+    backdrop-filter: var(--glass-blur);
+  }
+  html[data-material='glass'] .search input:hover { background: linear-gradient(rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.09)), var(--box-fill); }
+  html[data-material='glass'] .search input:focus { background: rgba(15, 23, 42, 0.85); }
+  /* The error banner keeps its amber, on a box. */
+  html[data-material='glass'] .banner { background: linear-gradient(rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.12)), var(--box-fill); }
+
+  html[data-material='glass'] a,
+  html[data-material='glass'] .link-button { color: var(--link); }
+  /* Light blues a step lighter, for the see-through boxes. */
+  html[data-material='glass'] .rain-summary.is-likely,
+  html[data-material='glass'] .day-rain.is-wet { color: var(--wet); }
+  html[data-material='glass'] .day.is-today .day-name { color: var(--today); }
+}

@@ -95,6 +95,8 @@ export interface AppPage {
   move(x: number, y: number): Promise<void>;
   /** Emulate Windows' "Animation effects: off" (prefers-reduced-motion: reduce). */
   emulateReducedMotion(on: boolean): Promise<void>;
+  /** Emulate CSS media features, e.g. { 'forced-colors': 'active' }; an empty object clears them. */
+  emulateMedia(features: Record<string, string>): Promise<void>;
   /** Run a script in every page load before the app's own scripts, then reload (e.g. to speed up timers). */
   reloadWithScript(source: string): Promise<void>;
   /** A PNG of the window. With `cssPixels`, one image pixel per CSS pixel (smaller files on high-DPI screens). */
@@ -155,6 +157,8 @@ export interface LaunchOptions {
   executable?: string;
   /** Extra environment variables for the app. */
   env?: Record<string, string>;
+  /** Extra command-line arguments for the app (tests that the app ignores what it does not know). */
+  args?: string[];
 }
 
 export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<LaunchedApp> {
@@ -174,6 +178,7 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
       // Own profile folder, so a running installed copy's single-instance lock doesn't apply.
       `--user-data-dir=${path.join(dataDir, 'profile')}`,
       ...(opts.executable ? [] : [root]),
+      ...(opts.args ?? []),
     ],
     {
       cwd: root,
@@ -260,6 +265,9 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
       await cdp.send('Emulation.setEmulatedMedia', {
         features: [{ name: 'prefers-reduced-motion', value: on ? 'reduce' : 'no-preference' }],
       });
+    },
+    async emulateMedia(features) {
+      await cdp.send('Emulation.setEmulatedMedia', { features: Object.entries(features).map(([name, value]) => ({ name, value })) });
     },
     async reloadWithScript(source) {
       await cdp.send('Page.enable');

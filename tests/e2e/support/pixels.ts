@@ -78,3 +78,24 @@ export function contrast(a: Rgb, b: Rgb): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
   return (hi + 0.05) / (lo + 0.05);
 }
+
+/**
+ * Share of pixels in a rectangle (device px) that sit on a sharp edge: a jump of more than `step` (0-255) in
+ * luminance to the right or downward neighbour. Text on a card gives a few percent; a 40 px blur gives ~0.
+ */
+export function edgeShare(img: Image, x0: number, y0: number, w: number, h: number, step = 10): number {
+  const lum = (x: number, y: number) => {
+    const [r, g, b] = img.at(x, y);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  let edges = 0;
+  let n = 0;
+  for (let y = y0; y < y0 + h - 1; y++) {
+    for (let x = x0; x < x0 + w - 1; x++) {
+      const l = lum(x, y);
+      if (Math.abs(lum(x + 1, y) - l) > step || Math.abs(lum(x, y + 1) - l) > step) edges++;
+      n++;
+    }
+  }
+  return edges / n;
+}

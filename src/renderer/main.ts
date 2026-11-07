@@ -11,8 +11,10 @@ import {
   type WeatherData,
   type WindUnit,
 } from '../shared/types';
+import { skyState } from '../shared/sky';
 import { describeWeather } from '../shared/weatherCodes';
 import { api, ApiError } from './api';
+import { setupAppearance } from './appearance';
 import { moveTempNow } from './charts';
 import { nowMarker, renderDayDetails, updateNowDot } from './components/dayDetails';
 import { renderForecast, selectDay, setupForecast } from './components/forecast';
@@ -24,6 +26,9 @@ import { setupUpdateReady } from './components/updateNote';
 import { $, esc, round } from './dom';
 import { glyphs } from './icons';
 import { createRefresher } from './refresh';
+
+// Glass or solid first, before anything is drawn (v1.6).
+setupAppearance();
 
 const DEFAULT_PLACE: Place = {
   id: 2643743,
@@ -96,6 +101,7 @@ function render(): void {
   app.drawnHour = nowLocal.slice(0, 13);
   const info = describeWeather(w.current.weatherCode);
   document.body.dataset.theme = `${info.theme}-${w.current.isDay ? 'day' : 'night'}`;
+  document.body.dataset.sky = skyState(w.current.weatherCode, w.current.isDay); // the glass tint (styles.css); unused when solid
   document.title = `${place.name} · ${round(w.current.temperature)}${w.unitLabels.temperature} · Weather Dashboard`;
 
   renderHero($('#hero'), place, w, isFavorite(place), nowLocal, app.state.settings.timeFormat);

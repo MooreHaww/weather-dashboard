@@ -10,7 +10,15 @@
 // So these pictures show each theme; they are not a record of the real weather.
 // All three use the same window size (1360x900), the same city and favorites, and a clean
 // data folder with Settings closed. Images are captured at 1x and run through optimizePng
-// (colour channels rounded to even values, which is invisible) so each file is about 250 KB or less.
+// (colour channels rounded to even values, which is invisible). Since 1.6 each file is about 220-240 KB
+// (1.5.1's shots were about 250 KB).
+//
+// Since 1.6 the window is Windows' acrylic glass, which shows what is behind the window, and a page
+// screenshot (CDP) cannot see it (Windows draws it behind the page). So each shot is taken over a
+// controlled backdrop: a plain window filled with flat mid-grey #808080 covers the screen behind the app
+// (scripts/screen.ts), the app is kept in front and focused (unfocused, Windows shows flat grey instead
+// of the glass), and the window's area of the real screen is captured with Electron's desktopCapturer.
+// On a PC without the glass effect the same steps give the plain dark look.
 
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -18,6 +26,7 @@ import { localIsoIn } from '../src/shared/time';
 import type { Place } from '../src/shared/types';
 import { COLORS, countPixels, launchApp, temperaturePainted, waitForDashboard } from './launch';
 import { optimizePng } from './optimize-png';
+import { captureWindow, removeBackdrop, showBackdrop } from './screen';
 
 const CITIES: Place[] = [
   { id: 2643743, name: 'London', latitude: 51.50853, longitude: -0.12574, admin1: 'England', country: 'United Kingdom', countryCode: 'GB', timezone: 'Europe/London' },
@@ -105,12 +114,15 @@ async function capture(scene: Scene): Promise<void> {
     await page.waitFor(`!document.querySelector('.fav-weather [aria-label="Loading weather"]')`, 30_000);
     await page.waitFor(`${temperaturePainted()} > 150`, 10_000);
     if (scene.rain) await page.waitFor(`${countPixels('rain-chart', COLORS.rainBars)} > 200`, 10_000);
+    await showBackdrop(app, 'grey'); // also brings the app to the front and focuses it
     await new Promise((r) => setTimeout(r, 1500)); // let animations settle
     if (app.errors.length) throw new Error(`Page errors:\n${app.errors.join('\n')}`);
 
     const out = path.join(__dirname, '..', 'docs', scene.file);
     await mkdir(path.dirname(out), { recursive: true });
-    await writeFile(out, optimizePng(await page.screenshot({ cssPixels: true }), 2));
+    const png = await captureWindow(app);
+    await removeBackdrop(app);
+    await writeFile(out, optimizePng(png, 2));
     const kb = Math.round((await stat(out)).size / 1024);
     console.log(`Saved ${path.relative(process.cwd(), out)} (${scene.theme}, clock ${scene.time}, ${kb} KB)`);
   } finally {
