@@ -23,7 +23,8 @@ describe('compatibility with 1.4.0 data files', () => {
     delete saved.version; // the file format number, not part of the state
     expect(await new Storage(dir).get()).toEqual({
       ...saved,
-      settings: { ...saved.settings, location: 'ask' }, // not answered yet: the consent card shows, nothing is looked up
+      settings: { ...saved.settings, location: 'ask', appearance: 'glass' }, // 1.7: a file from before keeps the glass look
+      // not answered yet: the consent card shows, nothing is looked up
       myLocation: null,
     });
   });
@@ -32,7 +33,7 @@ describe('compatibility with 1.4.0 data files', () => {
     const before = JSON.parse(await readFile(FIXTURE, 'utf8')) as { settings: Record<string, string> };
     await new Storage(dir).updateSettings({ timeFormat: '12h' });
     const after = JSON.parse(await readFile(path.join(dir, 'weather-dashboard.json'), 'utf8')) as typeof before;
-    expect(after).toEqual({ ...before, settings: { ...before.settings, timeFormat: '12h', location: 'ask' }, myLocation: null });
+    expect(after).toEqual({ ...before, settings: { ...before.settings, timeFormat: '12h', location: 'ask', appearance: 'glass' }, myLocation: null });
     expect(Object.keys(after).slice(0, Object.keys(before).length)).toEqual(Object.keys(before)); // old keys, same order
   });
 });

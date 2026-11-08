@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
+  APPEARANCES,
   LOCATION_PLACE_ID,
   LOCATION_SETTINGS,
   TEMP_LABELS,
@@ -24,7 +25,8 @@ interface StoredFile extends AppState {
 }
 
 export function defaultSettings(): Settings {
-  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask' };
+  // A fresh install starts classic. A file written before 1.7 has no appearance: it gets 'glass' (see sanitize and load).
+  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' };
 }
 
 export function defaultState(): AppState {
@@ -40,6 +42,7 @@ export function validSettings(raw: unknown): Partial<Settings> {
   if (WIND_UNITS.includes(o.windUnit as never)) out.windUnit = o.windUnit as Settings['windUnit'];
   if (TEMP_LABELS.includes(o.tempLabels as never)) out.tempLabels = o.tempLabels as Settings['tempLabels'];
   if (LOCATION_SETTINGS.includes(o.location as never)) out.location = o.location as Settings['location'];
+  if (APPEARANCES.includes(o.appearance as never)) out.appearance = o.appearance as Settings['appearance'];
   return out;
 }
 
@@ -73,7 +76,8 @@ function sanitize(raw: unknown): AppState {
   const o = raw as Record<string, unknown>;
   const places = (x: unknown, max: number) =>
     (Array.isArray(x) ? x : []).map(toPlace).filter((p): p is Place => p !== null).slice(0, max);
-  const settings = { ...defaultSettings(), ...validSettings(o.settings) };
+  // A file that exists is a current user's: without the field it keeps the look it had (glass, 1.6).
+  const settings: Settings = { ...defaultSettings(), appearance: 'glass', ...validSettings(o.settings) };
   const myLocation = toPlace(o.myLocation);
   return {
     favorites: places(o.favorites, MAX_FAVORITES),
@@ -104,18 +108,35 @@ export class Storage {
       try {
         text = await fs.readFile(this.filePath, 'utf8');
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return (this.state = defaultState());
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return this.decided(defaultState()); // a fresh install: classic
         throw err;
       }
+      let raw: unknown;
       try {
-        return (this.state = sanitize(JSON.parse(text)));
+        raw = JSON.parse(text);
       } catch {
-        // Corrupt file: keep a copy for inspection and start fresh rather than crash.
+        // Corrupt file: keep a copy for inspection and start fresh rather than crash. A file existed, so the look stays glass.
         await fs.rename(this.filePath, `${this.filePath}.corrupt-${Date.now()}`).catch(() => {});
-        return (this.state = defaultState());
+        return this.decided({ ...defaultState(), settings: { ...defaultSettings(), appearance: 'glass' } });
       }
+      const state = sanitize(raw);
+      const saved = (raw as { settings?: { appearance?: unknown } } | null)?.settings?.appearance;
+      return saved === state.settings.appearance ? (this.state = state) : this.decided(state);
     })();
     return this.loading;
+  }
+
+  /**
+   * The look is decided once, at the first read (v1.7): no file = classic, a file without the field = glass. The decision is
+   * written at once, so a later read can never decide differently. A failed write only means it is decided again next time.
+   */
+  private async decided(state: AppState): Promise<AppState> {
+    this.state = state;
+    const snapshot: StoredFile = { version: 1, ...structuredClone(state) };
+    const write = this.writeChain.then(() => this.writeAtomic(JSON.stringify(snapshot, null, 2)));
+    this.writeChain = write.catch(() => {});
+    await write.catch(() => {});
+    return state;
   }
 
   async get(): Promise<AppState> {

@@ -170,7 +170,7 @@ describe('the hero for the detected place', () => {
 });
 
 describe('the Settings > Location switch', () => {
-  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask' };
+  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' };
   const setLocation = vi.fn<(on: boolean) => void>();
   const bindings: SettingsBindings = {
     get: () => settings,
@@ -184,6 +184,8 @@ describe('the Settings > Location switch', () => {
       syncSettingsControls();
     },
     locationStatus: () => `status for ${settings.location}`,
+    setAppearance: vi.fn(),
+    glassSupported: () => true,
     now: () => '2026-10-17T16:05:30',
   };
   beforeEach(() => {

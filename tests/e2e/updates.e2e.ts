@@ -111,6 +111,7 @@ describe('before an update is ready', () => {
     await openSettings();
     expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Updates',
+      'Look',
       'Units',
       'Time format',
       'Temperature chart',
@@ -196,6 +197,7 @@ describe('when an update is ready (message simulated, no update in the main proc
     await openSettings();
     expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Updates',
+      'Look',
       'Units',
       'Time format',
       'Temperature chart',

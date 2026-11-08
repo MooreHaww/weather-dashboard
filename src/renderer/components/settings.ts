@@ -4,7 +4,7 @@
 
 import { LOCATION_FACTS, LOCATION_SETTINGS_LINE } from '../../shared/locationText';
 import { formatTime } from '../../shared/time';
-import { WIND_LABELS, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
+import { WIND_LABELS, type Appearance, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
 
 export interface SettingsSection {
   /** Unique id, used for the section's DOM id ("settings-<id>"). */
@@ -27,6 +27,10 @@ export interface SettingsBindings {
   setTempLabels(tempLabels: TempLabels): void;
   /** The "Use my location" switch: on asks the server for the place (and the answer comes back through a sync), off forgets it. */
   setLocation(on: boolean): void;
+  /** Settings > Look (v1.7): Classic or Glass, applied at once. */
+  setAppearance(appearance: Appearance): void;
+  /** Whether this PC can show glass now; when it cannot, the Glass option is disabled (and the page shows classic). */
+  glassSupported(): boolean;
   /** The line under the switch (see locationStatus in shared/locationText.ts). */
   locationStatus(): string;
   /** The selected city's current local time ("YYYY-MM-DDTHH:mm:ss"), used for the time-format examples. */
@@ -49,7 +53,7 @@ export function onSettingsSync(fn: () => void): void {
 /** A row of mutually exclusive buttons (radio-group semantics), styled as a pill group. */
 export function segmentedControl<T extends string>(opts: {
   /** A label can be a function, so it can show something live (like the current time). */
-  options: { value: T; label: string | (() => string) }[];
+  options: { value: T; label: string | (() => string); disabled?: () => boolean }[];
   current: () => T;
   onChange: (value: T) => void;
 }): HTMLElement {
@@ -62,7 +66,9 @@ export function segmentedControl<T extends string>(opts: {
     b.setAttribute('role', 'radio');
     b.dataset.value = value;
     b.textContent = typeof label === 'function' ? label() : label;
-    b.addEventListener('click', () => opts.onChange(value));
+    b.addEventListener('click', () => {
+      if (!b.disabled) opts.onChange(value);
+    });
     return b;
   });
   const sync = () => {
@@ -70,6 +76,10 @@ export function segmentedControl<T extends string>(opts: {
     buttons.forEach((b, i) => {
       const label = opts.options[i]!.label;
       if (typeof label === 'function') b.textContent = label();
+      const off = opts.options[i]!.disabled?.() ?? false;
+      b.disabled = off;
+      if (off) b.setAttribute('aria-disabled', 'true');
+      else b.removeAttribute('aria-disabled');
       const on = b.dataset.value === current;
       b.setAttribute('aria-checked', String(on));
       b.setAttribute('aria-pressed', String(on)); // drives the pressed styling
@@ -98,8 +108,33 @@ export function switchControl(opts: { current: () => boolean; onChange: (on: boo
   return b;
 }
 
-/** Add future settings sections here, in display order. */
+/** The info button's text in Settings > Look (v1.7). */
+export const LOOK_GLASS_NEEDS = 'Glass needs Windows 11 22H2 or newer with Transparency effects on.';
+
+/** Add future settings sections here, in display order. (Updates is added first by updateNote.ts, so Look is second.) */
 export const SETTINGS_SECTIONS: SettingsSection[] = [
+  {
+    id: 'look',
+    title: 'Look',
+    render(body) {
+      const row = settingsRow({
+        label: 'Look',
+        control: segmentedControl<Appearance>({
+          options: [
+            { value: 'classic', label: 'Classic' },
+            { value: 'glass', label: 'Glass', disabled: () => !bindings!.glassSupported() },
+          ],
+          // Where glass cannot be shown the page is classic, so Classic is what reads as chosen.
+          current: () => (bindings!.glassSupported() ? bindings!.get().appearance : 'classic'),
+          onChange: (v) => bindings!.setAppearance(v),
+        }),
+      });
+      // The section title already says "Look": the row's own label is for screen readers only.
+      row.querySelector('.settings-row-label')!.classList.add('sr-only');
+      row.querySelector('.settings-row-control')!.append(...infoPopover({ id: 'look-info', label: 'About Glass', lines: [LOOK_GLASS_NEEDS] }));
+      body.append(row);
+    },
+  },
   {
     id: 'units',
     title: 'Units',
@@ -307,7 +342,7 @@ const POPOVER_WIDTH = 320;
  * under the button or above it, inside the sections area with 16 px margins; it scrolls inside itself if it does not fit.
  * Escape closes only the popover and returns focus to the button; a click outside or focus leaving closes it too.
  */
-export function infoPopover(opts: { id: string; label: string; title: string; lines: readonly string[] }): [HTMLButtonElement, HTMLElement] {
+export function infoPopover(opts: { id: string; label: string; title?: string; lines: readonly string[] }): [HTMLButtonElement, HTMLElement] {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'info-button';
@@ -323,21 +358,30 @@ export function infoPopover(opts: { id: string; label: string; title: string; li
   popover.setAttribute('role', 'dialog');
   popover.tabIndex = -1;
   popover.hidden = true;
-  const title = document.createElement('h4');
-  title.className = 'info-popover-title';
-  title.id = `${opts.id}-title`;
-  title.textContent = opts.title;
-  popover.setAttribute('aria-labelledby', title.id);
-  const list = document.createElement('ul');
-  list.className = 'info-popover-list';
-  list.append(
-    ...opts.lines.map((line) => {
-      const li = document.createElement('li');
-      li.textContent = line;
-      return li;
-    }),
-  );
-  popover.append(title, list);
+  if (opts.title === undefined) {
+    // One plain line (Settings > Look): the popover is named by its button.
+    popover.setAttribute('aria-label', opts.label);
+    const p = document.createElement('p');
+    p.className = 'info-popover-text';
+    p.textContent = opts.lines.join(' ');
+    popover.append(p);
+  } else {
+    const title = document.createElement('h4');
+    title.className = 'info-popover-title';
+    title.id = `${opts.id}-title`;
+    title.textContent = opts.title;
+    popover.setAttribute('aria-labelledby', title.id);
+    const list = document.createElement('ul');
+    list.className = 'info-popover-list';
+    list.append(
+      ...opts.lines.map((line) => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        return li;
+      }),
+    );
+    popover.append(title, list);
+  }
 
   const isOpen = () => !popover.hidden;
 

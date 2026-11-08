@@ -1,5 +1,5 @@
-// The glass look's outer tint (v1.6): which "sky" a weather code gives, day or night. Only the glass page uses it
-// (body[data-sky], styles.css); the solid look keeps body[data-theme] from weatherCodes.ts, unchanged.
+// Which "sky" a weather code gives, day or night: body[data-sky] (styles.css). The glass look tints its wash with it (v1.6),
+// and since 1.7 the classic look picks its opaque page background from it too. body[data-theme] is still set but no CSS reads it.
 // Open-Meteo's code list (https://open-meteo.com/en/docs, "WMO Weather interpretation codes") also has 97 "Heavy
 // thunderstorm", which describeWeather() does not know (it shows "Unknown"); here it is a thunderstorm.
 // Open-Meteo has no tornado code: the most severe state is a thunderstorm with hail (96, 99).

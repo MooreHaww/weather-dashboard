@@ -10,13 +10,15 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.6.1-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.7.0-orange?style=for-the-badge)
 
-| ![Clear day theme](docs/theme-clear.png) | ![Night theme](docs/theme-night.png) | ![Rain theme](docs/theme-rain.png) |
+| ![Clear day, glass look](docs/theme-clear.png) | ![Night, glass look](docs/theme-night.png) | ![Rain, glass look](docs/theme-rain.png) |
 |:---:|:---:|:---:|
-| Clear day | Night | Rain |
+| Glass look: clear day | Glass look: night | Glass look: rain |
+| ![Clear day, classic look](docs/classic-clear.png) | ![Night, classic look](docs/classic-night.png) | ![Rain, classic look](docs/classic-rain.png) |
+| Classic look: clear day | Classic look: night | Classic look: rain |
 
-<sub>Staged scenes: the screenshot script sets the weather and the time of day, so they do not show live weather (temperatures and wind are real). Taken over a flat grey backdrop.</sub>
+<sub>Staged scenes: the screenshot script sets the weather and the time of day, so they do not show live weather (temperatures and wind are real). Same window size for all six. Taken over a flat grey backdrop, which shows through only in the glass look.</sub>
 
 </div>
 
@@ -54,6 +56,7 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **Your location (v1.5):** the first time, a card asks whether the app may guess your city from your IP address. Nothing is looked up until you say yes. If you do, **Your location** stays on top of the sidebar (it is not a favorite and not a recent search) and, on a first start, it is the city shown. **Not now** is remembered, and the switch in Settings changes either answer.
 - **Check for updates (v1.5):** a button in the Updates section of Settings, for when you do not want to wait for the automatic check.
 - **Liquid glass look (v1.6):** on Windows 11 22H2 or newer the outer area of the window is Windows' acrylic glass, so what is behind the window shows through, blurred. It is tinted by the weather of the shown city (nine weather groups, each with a day and a night colour). The boxes are translucent dark frosted glass and look the same in every weather. Where the effect is not available, the app keeps the plain dark look.
+- **Choose the look (v1.7):** **Settings > Look** switches between **Classic** and **Glass** at once, with no restart. The classic look now changes with the weather and the time of day too: the same 18 weather states as the glass tint, each with its own opaque dark background. New installs start in Classic; people who update from 1.6 keep Glass. Glass shows only where Windows can draw it; elsewhere the Glass option is disabled and its **i** button says what it needs.
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -88,8 +91,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (384 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (212 tests, needs internet) |
+| `npm test` | Unit and API tests (435 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (221 tests, needs internet) |
 | `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (11 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
@@ -124,12 +127,13 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 | Section | Options |
 |---|---|
 | **Updates** | Always first. The installed version and the state: "Version 1.5.1 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
+| **Look** | **Classic** or **Glass**, applied at once. Classic is an opaque dark page whose colour follows the weather and the time of day; Glass is Windows' acrylic glass. Glass is disabled where Windows cannot draw it (older than Windows 11 22H2, "Transparency effects" off, high contrast or reduced transparency); the **i** button next to it says "Glass needs Windows 11 22H2 or newer with Transparency effects on." If glass becomes possible later (for example, transparency effects turned back on), a saved Glass choice applies without a restart |
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 | **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
 | **Location** | **Use my location** switch. It is off until you answer the card in the sidebar. On: the app asks GeoJS for your city (by IP address, at each start) and says "Near Paris, France. This is approximate."; if it cannot, "Couldn't find your location. It tries again the next time the app starts." Off: no lookup is made and the stored place is deleted. The section says what is sent: "Uses your IP address, sent to GeoJS." The **i** button next to the switch opens "How your IP address is used", the same text as under [Privacy](#privacy); `Esc` or a click outside closes it and leaves Settings open |
 
-Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). The look is decided once, the first time 1.7 reads the file, and saved straight away: no file (a new install) gives Classic, a file without the field (an update from 1.6 or older) gives Glass. Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -164,12 +168,13 @@ Electron main process
 - **Security.** The window runs sandboxed with context isolation and no Node access. A strict Content Security Policy blocks outside scripts. The server only answers requests addressed to `127.0.0.1` or `localhost` (this blocks DNS-rebinding attacks). All API text is HTML-escaped. The page can send two messages to the main process, both with no arguments. "Update now" is ignored unless an update has been downloaded; "Check for updates" is ignored in a build that does not update itself, while an update is downloading or ready, while a check runs, and within 30 seconds of the last one. Both are ignored unless they come from the app's own window and top frame, loaded from the local server.
 - **Location by IP, in the server, behind a switch.** The lookup runs in the local Express server, not in the page, so the page's Content Security Policy did not change. The server refuses it unless the saved setting says you allowed it (the page cannot skip that), makes one plain request (no cookies, no identifiers, a generic `User-Agent`, 5 seconds, no retry, no redirects), keeps only the city, country, coordinates rounded to about 1 km and the timezone from the answer after checking each, and never stores or logs the IP address. The detected place has its own id (-1) so it can never end up in favorites, recent cities or the next start's city.
 - **Glass (v1.6): Windows draws it, the page only tints it.** The window uses Electron's `backgroundMaterial: 'acrylic'` with a fully transparent window colour (not `transparent: true`: a fully transparent window was tried and lost double-click maximize, Win+arrow snapping, the snap layouts, rounded corners and the shadow). Acrylic was chosen over mica because it blurs whatever is behind the window, live; mica only samples the desktop wallpaper. The main process decides at start (and again when Windows' accessibility settings change, or when the window gets focus) and tells the page "glass" or "solid"; the page can only listen. Over the glass the page draws only a light wash in the weather's colour (alpha 0.12 to 0.35; one CSS value, `--wash-strength`, sets how strong it is). The boxes have a flat dark fill of 0.65 with blur, a thin light edge and an inner glow, the same in every weather (a soft gradient on top of each box was removed in 1.6.1: Chromium dithers gradients, and that was the fine shimmer over the boxes). The sidebar's Your location, Favorites and Recent lists are plain rows on the bare glass, as in the plain look, not boxes. Contrast rule for everything on a box: main text and numbers 4.5:1 over a mid-grey and a dark desktop and 3:1 over white; secondary text and graphics 3:1 over grey and dark. Windows' own acrylic tint is not counted on. Behind the open Settings panel the dashboard is blurred by a CSS `filter` on the dashboard itself: the panel's `backdrop-filter` left the dashboard text sharp over the see-through page.
+- **Look choice (v1.7) without a new message.** The page decides what it shows: Glass only if you chose it and the main process says Windows can draw it (plus no forced colours and no reduced transparency); otherwise Classic. The window keeps its acrylic material in Classic, covered by the opaque page; turning the material off would need either a new message from the page to the main process or the main process reading the saved setting itself, so it was left as it is. The classic backgrounds were picked by a small search script and are checked by an offline test: every text 4.5:1 and every graphic 3:1 on all 18 backgrounds, and every two backgrounds at least ΔE 5 apart. That raised the muted text from 62 % to 78 % white and gave text links a lighter blue (#93c5fd); the old clear-day theme's muted text was 3.6:1. The classic Settings panel got a dark layer under a lighter tint and sheen, and solid muted text, so its text is also 4.5:1 on every background (before: 3.2:1 for muted text, 4.3:1 for normal text).
 - **Cache.** Coordinates are rounded to about 1 km so the same city always reuses one entry, and two identical simultaneous requests share one call to Open-Meteo.
 
 **How it is tested**
 
 - **Unit and API tests** (Vitest) run offline: cache, storage, time and rain helpers, settings, auto-update scheduling, the update state shown in Settings, the "Update now" and "Check for updates" checks in the main process, and the location lookup (what is sent, what is kept, what is refused).
-- **End-to-end tests** start the real built app in its own Electron window, with its own profile and a throwaway data folder, and drive it over the Chrome DevTools Protocol with real clicks and key presses. They resize the real window and measure the layout: no overlapping cards, the stat dividers every 50 px from 480 to 1400 px, the hourly strip's spacing, the current-time dot's position. They count the pixels each chart painted and fail on any page error. Animations stay on. The glass tests (v1.6) read the window's material from Windows itself, check that the page is see-through in glass mode and exactly the 1.5.1 look in the fallback (Windows 10 is simulated), and capture the real screen over a plain grey backdrop window: the weather wash per state, boxes that keep their look in every state, and no sharp dashboard text behind the open Settings panel. A separate offline test computes the contrast of every text and graphic on a box over mid-grey, black, a dark window and white behind the window, under every weather wash.
+- **End-to-end tests** start the real built app in its own Electron window, with its own profile and a throwaway data folder, and drive it over the Chrome DevTools Protocol with real clicks and key presses. They resize the real window and measure the layout: no overlapping cards, the stat dividers every 50 px from 480 to 1400 px, the hourly strip's spacing, the current-time dot's position. They count the pixels each chart painted and fail on any page error. Animations stay on. The glass tests (v1.6) read the window's material from Windows itself, check that the page is see-through in glass mode and the classic look in the fallback (Windows 10 is simulated), and capture the real screen over a plain grey backdrop window: the weather wash per state, boxes that keep their look in every state, and no sharp dashboard text behind the open Settings panel. A separate offline test computes the contrast of every text and graphic on a box over mid-grey, black, a dark window and white behind the window, under every weather wash. The look tests (v1.7) switch between Classic and Glass, restart the app to check the choice is kept, check that Glass is disabled on a simulated Windows 10, compare the classic background of a sunny and a rainy city, and check that Settings blurs the dashboard in both looks.
 - **The update test** builds the installer, runs the packaged app and points its updater at a local fake feed (a `latest.yml` and a fake installer). It checks the Updates section in each state (before the first check, up to date, downloading, ready, and a feed that returns 503), the download, the note, the red dot, "Update now", the restart path and the "Check for updates" button ("Checking…", the result, a second press ignored). The location tests start the app with GeoJS replaced by a fake that counts requests, so the real service is never contacted. The fake installer never runs.
 
 **Releases and auto-update**
@@ -229,7 +234,7 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - **Unsigned installer:** Windows SmartScreen warns on install (**More info**, then **Run anyway**).
 - **Windows only:** there is only a Windows installer.
 - **Location by IP is approximate:** it can be a city away, or the place of your provider or VPN. "Your location" has no star, because it is looked up again at each start instead of being saved as a favorite.
-- **Glass needs Windows 11 22H2 or newer:** the full glass effect needs Windows 11 22H2 or newer, with "Transparency effects" on in Windows. Otherwise (Windows 10, older Windows 11, transparency effects off, high contrast, reduced transparency) the app shows the plain dark look. While the window is not focused, Windows shows a flat grey instead of the glass.
+- **Glass needs Windows 11 22H2 or newer:** the full glass effect needs Windows 11 22H2 or newer, with "Transparency effects" on in Windows. Otherwise (Windows 10, older Windows 11, transparency effects off, high contrast, reduced transparency) the app shows the classic look and the Glass option in Settings is disabled. While the window is not focused, Windows shows a flat grey instead of the glass.
 - **Text on bare glass over a very bright wallpaper:** the app name, the sidebar section titles, the empty-list lines and the footer sit on the glass with only a text shadow, so over a very bright wallpaper or window they can be hard to read. Text on the boxes stays readable. The sidebar rows are on bare glass too: city names and numbers keep 4.5:1 over black and a dark window, but over a light weather wash on a mid-grey desktop they can fall under 3:1.
 - **Daylight-saving hour labels:** in the week before a clock change, the hours after the change are labelled one hour off (see [Code review (v1.4.5)](#code-review-v145)).
 
@@ -322,29 +327,35 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - [x] Glass polish (blur, glow and edges) (1.6.1)
 - [x] Update row no longer flickers after Check for updates (1.6.1)
 
-### v1.7 - Background mode
+### v1.7 - Choose the look
+- [x] A toggle in Settings to choose between the liquid glass look and the old look
+- [x] The old look also changes with the weather and the time of day
+
+#### v1.7 (Fixes)
+
+### v1.8 - Background mode
 - [ ] Close-button choice: exit completely, or keep running in the background (which keeps the widget alive)
 - [ ] Start with Windows: option to launch the app on PC startup
 - [ ] Tray icon that shows the current temperature
 
-#### v1.7 (Fixes)
-
-### v1.8 - Rain alerts
-- [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
-
 #### v1.8 (Fixes)
 
-### v1.9 - Desktop widget
+### v1.9 - Rain alerts
+- [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
+
+#### v1.9 (Fixes)
+
+### v2.0 - Desktop widget
 - [ ] Desktop widget: an option in the app to add a weather widget to the Windows desktop
 - [ ] Weather effects on the widget background: clouds when cloudy, raindrops with splashes when raining (drops also gather on the boxes), sun glow when sunny
 - [ ] Option for a fully transparent widget background (no system blur)
 
-#### v1.9 (Fixes)
+#### v2.0 (Fixes)
 
-### v2.0 - History
+### v2.1 - History
 - [ ] Optional long-term history (SQLite, still local)
 
-#### v2.0 (Fixes)
+#### v2.1 (Fixes)
 
 ### Later
 - [ ] More themes (still an idea)

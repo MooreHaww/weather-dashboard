@@ -5,6 +5,7 @@ import {
   type AppState,
   type CacheStatus,
   type Place,
+  type Appearance,
   type TempLabels,
   type TimeFormat,
   type Units,
@@ -27,8 +28,8 @@ import { $, esc, round } from './dom';
 import { glyphs } from './icons';
 import { createRefresher } from './refresh';
 
-// Glass or solid first, before anything is drawn (v1.6).
-setupAppearance();
+// The look first, before anything is drawn (v1.6; since 1.7 also the user's choice, applied once the settings arrive).
+const look = setupAppearance();
 
 const DEFAULT_PLACE: Place = {
   id: 2643743,
@@ -47,7 +48,7 @@ const app = {
   state: {
     favorites: [],
     recent: [],
-    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask' },
+    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' },
     lastPlace: null,
     myLocation: null,
   } as AppState,
@@ -101,7 +102,7 @@ function render(): void {
   app.drawnHour = nowLocal.slice(0, 13);
   const info = describeWeather(w.current.weatherCode);
   document.body.dataset.theme = `${info.theme}-${w.current.isDay ? 'day' : 'night'}`;
-  document.body.dataset.sky = skyState(w.current.weatherCode, w.current.isDay); // the glass tint (styles.css); unused when solid
+  document.body.dataset.sky = skyState(w.current.weatherCode, w.current.isDay); // the background in both looks (styles.css)
   document.title = `${place.name} · ${round(w.current.temperature)}${w.unitLabels.temperature} · Weather Dashboard`;
 
   renderHero($('#hero'), place, w, isFavorite(place), nowLocal, app.state.settings.timeFormat);
@@ -321,6 +322,16 @@ function setTempLabels(tempLabels: TempLabels): void {
   render();
 }
 
+/** Settings > Look (v1.7): applied at once, from what is on screen; nothing is reloaded and nothing goes to the main process. */
+function setAppearance(appearance: Appearance): void {
+  if (appearance === app.state.settings.appearance) return;
+  if (appearance === 'glass' && !look.supported()) return; // the Glass option is disabled then
+  app.state.settings.appearance = appearance;
+  look.setChoice(appearance);
+  syncSettingsControls();
+  api.saveSettings({ appearance }).catch(() => {});
+}
+
 /** Times are formatted from the weather we already have, so no reload is needed. */
 function setTimeFormat(timeFormat: TimeFormat): void {
   if (timeFormat === app.state.settings.timeFormat) return;
@@ -456,6 +467,8 @@ async function boot(): Promise<void> {
     setTimeFormat,
     setTempLabels,
     setLocation: (on) => void (on ? enableLocation() : disableLocation()),
+    setAppearance,
+    glassSupported: () => look.supported(),
     locationStatus: () => locationStatus(app.state.settings.location, app.state.myLocation, app.lookup),
     now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
   });
@@ -496,6 +509,9 @@ async function boot(): Promise<void> {
   } catch (err) {
     showBanner((err as Error).message, true);
   }
+  look.setChoice(app.state.settings.appearance);
+  look.onSupportChange(syncSettingsControls); // the Glass option follows what the system can show
+  syncSettingsControls();
   renderUnits();
   renderCards();
   const mine = app.state.settings.location === 'on' ? app.state.myLocation : null;

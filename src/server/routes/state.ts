@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { HttpError } from '../errors';
-import { TEMP_LABELS, TIME_FORMATS, WIND_UNITS } from '../../shared/types';
+import { APPEARANCES, TEMP_LABELS, TIME_FORMATS, WIND_UNITS } from '../../shared/types';
 import { toPlace, type Storage } from '../storage';
 
 function placeFromBody(body: unknown) {
@@ -70,6 +70,7 @@ export function stateRoutes(storage: Storage): Router {
     oneOf('tempLabels', TEMP_LABELS);
     // The page may only answer the consent card; 'ask' is the not-answered-yet state and is never set by a request.
     oneOf('location', ['on', 'off']);
+    oneOf('appearance', APPEARANCES);
     res.json((await storage.updateSettings(body)).settings);
   });
 

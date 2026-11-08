@@ -148,19 +148,21 @@ describe('glass contrast: everything on a box meets CLEAR_RULE', () => {
 
   it('the solid fallback is untouched: no glass token leaks outside the glass block', () => {
     const root = tokensOf(css, ':root');
-    expect(root['--muted']).toBe('rgba(226, 232, 240, 0.62)');
+    expect(root['--muted']).toBe('rgba(226, 232, 240, 0.78)'); // 1.7's contrast fix (was 0.62); glass sets its own
     expect(root['--box-fill']).toBeUndefined();
     const start = css.indexOf('/* ---------- glass (v1.6)');
     expect(start).toBeGreaterThan(0);
     // Everything glass is inside one media block, scoped to html[data-material='glass'].
     const block = css
-      .slice(css.indexOf('@media (forced-colors: none) and (prefers-reduced-transparency: no-preference) {', start))
+      .slice(css.indexOf('@media (forced-colors: none) and (prefers-reduced-transparency: no-preference) {', start), css.indexOf('/* ---------- Look (v1.7)'))
       .replace(/\/\*[\s\S]*?\*\//g, '');
     const selectors = [...block.matchAll(/^\s*([^{}@/][^{}]*)\{/gm)].map((m) => m[1]!.trim());
     expect(selectors.length).toBeGreaterThan(10);
     for (const sel of selectors) for (const part of sel.split(',')) expect(part.trim()).toMatch(/^html\[data-material='glass'\]/);
     expect(css.slice(0, start)).not.toContain('data-material');
-    expect(css.slice(0, start)).not.toContain('data-sky');
+    // Before it, data-sky appears only in the classic per-weather rules (1.7), one rule per state.
+    const before = css.slice(0, start).replace(/\/\*[\s\S]*?\*\//g, '');
+    expect([...before.matchAll(/data-sky/g)].length).toBe([...before.matchAll(/^body\[data-sky='[\w-]+'\] \{ --sky-1: #[0-9a-f]{6}; --sky-2: #[0-9a-f]{6}; --glow: rgba\([^)]+\); \}$/gm)].length);
   });
 
   it('no backing panels: the title bar, sidebar sections and footer have no glass background; bare-glass text has a shadow', () => {
@@ -174,7 +176,8 @@ describe('glass contrast: everything on a box meets CLEAR_RULE', () => {
 
   it('faint parts drawn on purpose (passed hours, low-chance rain bars, dividers, grid) are never fainter than 1.5.1 drew them, over grey and dark desktops', () => {
     // 1.5.1 solid: a card (white 0.055) over the lighter end of each theme's gradient (--sky-1); the lowest of these.
-    const sky1 = [...css.slice(0, css.indexOf('* { box-sizing')).matchAll(/--sky-1: (#[0-9a-f]{6})/g)].map((m) => m[1]!);
+    const old = readFileSync(path.join(__dirname, 'fixtures', 'styles-1.6.0-classic.css'), 'utf8');
+    const sky1 = [...old.slice(0, old.indexOf('* { box-sizing')).matchAll(/--sky-1: (#[0-9a-f]{6})/g)].map((m) => m[1]!);
     expect(sky1.length).toBe(9); // :root and the 8 themes
     const card = model.places()['card']!.layers;
     const desktops = { grey: RULE_BACKDROPS.grey!, black: RULE_BACKDROPS.black!, 'dark window': RULE_BACKDROPS['dark window']! };
@@ -188,11 +191,39 @@ describe('glass contrast: everything on a box meets CLEAR_RULE', () => {
   });
 });
 
-describe('the classic look is unchanged (1.6.1)', () => {
-  it('every CSS rule outside the glass block is byte for byte the 1.6.0 text (tests/fixtures/styles-1.6.0-classic.css, taken from git)', () => {
+describe('the classic look changes only where 1.7 meant it to', () => {
+  it('every CSS rule outside the glass block is the 1.6.0 text (tests/fixtures/styles-1.6.0-classic.css, taken from git), except the per-weather backgrounds and the contrast fix', () => {
     const fixture = readFileSync(path.join(__dirname, 'fixtures', 'styles-1.6.0-classic.css'), 'utf8').replace(/\r\n/g, '\n');
     const now = css.replace(/\r\n/g, '\n');
-    expect(now.slice(0, now.indexOf('/* ---------- glass (v1.6)'))).toBe(fixture);
+    const classic = now.slice(0, now.indexOf('/* ---------- glass (v1.6)'));
+    // 1. The eight data-theme backgrounds are replaced by the 18 data-sky ones: one comment, then one rule per state, nothing else.
+    //    The block is everything between the end of :root and the first other rule.
+    const themes = (t: string) => {
+      const from = t.indexOf('}\n\n', t.indexOf(':root {')) + 3;
+      return t.slice(from, t.indexOf('* { box-sizing'));
+    };
+    const newThemes = themes(classic);
+    expect(newThemes).toMatch(
+      /^\/\* The classic look per weather state \(v1\.7\)[^]*?\*\/\n(body\[data-sky='[\w-]+'\] \{ --sky-1: #[0-9a-f]{6}; --sky-2: #[0-9a-f]{6}; --glow: rgba\([^)]+\); \}\n){18}\n$/,
+    );
+    expect(themes(fixture)).toMatch(/^(body\[data-theme[^\n]+\n){8}\n$/);
+    let expected = fixture.replace(themes(fixture), newThemes);
+    // 2. The contrast fix: muted text 0.62 -> 0.78, and text links get their own lighter token.
+    const fixes: [string, string][] = [
+      ['  --muted: rgba(226, 232, 240, 0.62);\n', '  --muted: rgba(226, 232, 240, 0.78); /* 1.7: was 0.62, under 4.5:1 on hovered and selected rows and days */\n'],
+      ['  --accent: #60a5fa;\n', '  --accent: #60a5fa;\n  --link: #93c5fd; /* text links (1.7): a step lighter than the accent, 4.5:1 on cards and the consent card */\n'],
+      ['a { color: var(--accent); text-decoration: none; }', 'a { color: var(--link); text-decoration: none; }'],
+      ['  color: var(--accent); font-size: 12px; font-weight: 500;', '  color: var(--link); font-size: 12px; font-weight: 500;'],
+    ];
+    for (const [from, to] of fixes) {
+      expect(expected.split(from).length, from).toBe(2);
+      expected = expected.replace(from, to);
+    }
+    expect(classic).toBe(expected);
+  });
+
+  it('the old data-theme backgrounds are gone and nothing else in the CSS reads data-theme', () => {
+    expect(css).not.toContain('data-theme');
   });
 });
 

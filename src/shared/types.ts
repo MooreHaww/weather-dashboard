@@ -17,6 +17,12 @@ export const WIND_LABELS: Record<WindUnit, string> = { kmh: 'km/h', mph: 'mph', 
  */
 export type LocationSetting = 'ask' | 'on' | 'off';
 export const LOCATION_SETTINGS: readonly LocationSetting[] = ['ask', 'on', 'off'];
+/**
+ * The look (v1.7): 'classic' = the opaque dark look that follows the weather, 'glass' = Windows' acrylic glass
+ * (shown only where the system supports it; otherwise the page shows classic).
+ */
+export type Appearance = 'classic' | 'glass';
+export const APPEARANCES: readonly Appearance[] = ['classic', 'glass'];
 /** The id of the detected place. Real places have positive ids, so this never collides with a favorite. */
 export const LOCATION_PLACE_ID = -1;
 
@@ -101,6 +107,7 @@ export interface Settings {
   windUnit: WindUnit;
   tempLabels: TempLabels;
   location: LocationSetting;
+  appearance: Appearance;
 }
 
 export interface AppState {

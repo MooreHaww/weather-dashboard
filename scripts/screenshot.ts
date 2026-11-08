@@ -1,5 +1,7 @@
-// Captures the three README theme screenshots (docs/theme-clear.png, docs/theme-night.png,
-// docs/theme-rain.png) from the real, built app. Run with: npm run screenshot
+// Captures the README screenshots from the real, built app: the glass look (docs/theme-clear.png,
+// docs/theme-night.png, docs/theme-rain.png) and, since 1.7, the classic look (docs/classic-clear.png,
+// docs/classic-night.png, docs/classic-rain.png). Run with: npm run screenshot
+// Only some: npm run screenshot -- classic (or glass, or part of a file name).
 //
 // The weather decides the theme, so each scene is set up on purpose. The app is launched
 // with an injected script (the same technique the e2e tests use) that:
@@ -40,6 +42,8 @@ const SIZE = { width: 1360, height: 900 };
 
 interface Scene {
   file: string;
+  /** Settings > Look (1.7). Glass shows only where Windows can draw it. */
+  look: 'glass' | 'classic';
   /** The theme this scene is for (document.body.dataset.theme). */
   theme: string;
   /** What the city's clock reads, as "HH:mm". */
@@ -50,9 +54,12 @@ interface Scene {
 }
 
 const SCENES: Scene[] = [
-  { file: 'theme-clear.png', theme: 'clear-day', time: '11:30', code: 0, rain: false },
-  { file: 'theme-night.png', theme: 'clear-night', time: '22:30', code: 0, rain: false },
-  { file: 'theme-rain.png', theme: 'rain-day', time: '15:20', code: 63, rain: true },
+  { file: 'theme-clear.png', look: 'glass', theme: 'clear-day', time: '11:30', code: 0, rain: false },
+  { file: 'theme-night.png', look: 'glass', theme: 'clear-night', time: '22:30', code: 0, rain: false },
+  { file: 'theme-rain.png', look: 'glass', theme: 'rain-day', time: '15:20', code: 63, rain: true },
+  { file: 'classic-clear.png', look: 'classic', theme: 'clear-day', time: '11:30', code: 0, rain: false },
+  { file: 'classic-night.png', look: 'classic', theme: 'clear-night', time: '22:30', code: 0, rain: false },
+  { file: 'classic-rain.png', look: 'classic', theme: 'rain-day', time: '15:20', code: 63, rain: true },
 ];
 
 /** Runs in the page before the app's own scripts. */
@@ -99,7 +106,7 @@ function sceneScript(scene: Scene, skewMs: number): string {
 async function capture(scene: Scene): Promise<void> {
   const favorites = CITIES;
   const recent = CITIES;
-  const app = await launchApp({ favorites, recent, lastPlace: CITY, settings: { units: 'metric', timeFormat: '12h' } });
+  const app = await launchApp({ favorites, recent, lastPlace: CITY, settings: { units: 'metric', timeFormat: '12h', appearance: scene.look } });
   const { page } = app;
   try {
     // Shift the clock so London reads the scene's time (same date, so the forecast days line up).
@@ -110,6 +117,7 @@ async function capture(scene: Scene): Promise<void> {
     await app.resize(SIZE.width, SIZE.height);
     await waitForDashboard(page);
     await page.waitFor(`document.body.dataset.theme === ${JSON.stringify(scene.theme)}`, 10_000);
+    if (scene.look === 'classic') await page.waitFor(`document.documentElement.dataset.material === 'solid'`, 5000);
     // Every city card has finished loading, and the charts have painted.
     await page.waitFor(`!document.querySelector('.fav-weather [aria-label="Loading weather"]')`, 30_000);
     await page.waitFor(`${temperaturePainted()} > 150`, 10_000);
@@ -124,14 +132,17 @@ async function capture(scene: Scene): Promise<void> {
     await removeBackdrop(app);
     await writeFile(out, optimizePng(png, 2));
     const kb = Math.round((await stat(out)).size / 1024);
-    console.log(`Saved ${path.relative(process.cwd(), out)} (${scene.theme}, clock ${scene.time}, ${kb} KB)`);
+    console.log(`Saved ${path.relative(process.cwd(), out)} (${scene.look}, ${scene.theme}, clock ${scene.time}, ${kb} KB)`);
   } finally {
     await app.close();
   }
 }
 
 async function main() {
-  for (const scene of SCENES) await capture(scene);
+  const only = process.argv[2];
+  const scenes = only ? SCENES.filter((s) => s.look === only || s.file.includes(only)) : SCENES;
+  if (!scenes.length) throw new Error(`No scene matches "${only}"`);
+  for (const scene of scenes) await capture(scene);
 }
 
 main().catch((err) => {

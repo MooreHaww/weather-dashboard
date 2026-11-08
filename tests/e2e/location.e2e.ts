@@ -117,7 +117,7 @@ describe('before the user answers', () => {
     expect(await geoCalls()).toEqual([]);
     expect(await placeName()).toBe('Tokyo');
     await openSettings();
-    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections button[aria-checked="true"]')].map((b) => b.dataset.value)`)).toEqual(['imperial', 'mph', '24h', '2h']);
+    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[aria-checked="true"]')].map((b) => b.dataset.value)`)).toEqual(['imperial', 'mph', '24h', '2h']); // Look (1.7) depends on the PC
     await closeSettings();
   });
 

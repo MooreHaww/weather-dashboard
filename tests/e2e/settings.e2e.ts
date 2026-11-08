@@ -52,7 +52,8 @@ async function chooseOption(value: string) {
 
 const checkedOptions = () =>
   page.evaluate<string[]>(
-    `[...document.querySelectorAll('#settings-sections button[aria-checked="true"]')].map((b) => b.dataset.value)`,
+    // Look (1.7) is left out here: which option is checked depends on this PC (tests/e2e/look.e2e.ts covers it).
+    `[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[aria-checked="true"]')].map((b) => b.dataset.value)`,
   );
 const clockText = () => page.evaluate<string>(`document.getElementById('clock-time').textContent`);
 const windUnitIs = (unit: string) =>
@@ -96,6 +97,7 @@ describe('settings panel', () => {
     // Exactly the real sections: no placeholders for startup, close behavior or widget.
     expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Updates',
+      'Look',
       'Units',
       'Time format',
       'Temperature chart',
@@ -113,7 +115,8 @@ describe('settings panel', () => {
         // Solid: the sheet's own backdrop-filter. Glass (v1.6): a filter on the dashboard itself, because the sheet's
         // backdrop-filter left the dashboard sharp over the see-through page (tests/e2e/glass.e2e.ts).
         backdrop: document.documentElement.dataset.material === 'glass' ? getComputedStyle(document.querySelector('.layout')).filter : s.backdropFilter,
-        bg: s.backgroundImage, shadow: s.boxShadow, radius: s.borderTopLeftRadius,
+        // Classic: gradient layers; glass (since 1.6.1): a flat scrim colour, no gradient.
+        bg: s.backgroundImage + ' ' + s.backgroundColor, shadow: s.boxShadow, radius: s.borderTopLeftRadius,
         noScrim: document.querySelector('.settings-scrim') === null };
     })()`);
     // Covers the whole window (within a pixel: the slide-in easing may still be settling).

@@ -3,13 +3,14 @@
 :root {
   --bg: #0b1220;
   --text: #e8edf5;
-  --muted: rgba(226, 232, 240, 0.62);
+  --muted: rgba(226, 232, 240, 0.78); /* 1.7: was 0.62, under 4.5:1 on hovered and selected rows and days */
   --card: rgba(255, 255, 255, 0.055);
   --card-hover: rgba(255, 255, 255, 0.085);
   --stroke: rgba(255, 255, 255, 0.09);
   --stroke-strong: rgba(255, 255, 255, 0.16);
   --divider: rgba(255, 255, 255, 0.08);
   --accent: #60a5fa;
+  --link: #93c5fd; /* text links (1.7): a step lighter than the accent, 4.5:1 on cards and the consent card */
   --accent-strong: #3b82f6;
   --rain: #5ab0ff;
   --gold: #fbbf24; /* favorites: the star and the favorite cards' accent bar */
@@ -27,14 +28,27 @@
   color-scheme: dark;
 }
 
-body[data-theme='clear-day'] { --sky-1: #1f4f8f; --sky-2: #0f2140; --glow: rgba(255, 196, 77, 0.22); }
-body[data-theme='clear-night'] { --sky-1: #1a1f4a; --sky-2: #070a1c; --glow: rgba(147, 160, 255, 0.16); }
-body[data-theme='cloudy-day'] { --sky-1: #2a3a55; --sky-2: #111a2b; --glow: rgba(203, 213, 225, 0.12); }
-body[data-theme='cloudy-night'] { --sky-1: #1c2436; --sky-2: #0a0f1a; --glow: rgba(148, 163, 184, 0.1); }
-body[data-theme^='rain'] { --sky-1: #1d3350; --sky-2: #0a1424; --glow: rgba(90, 176, 255, 0.2); }
-body[data-theme^='storm'] { --sky-1: #2b2445; --sky-2: #0b0915; --glow: rgba(196, 160, 255, 0.16); }
-body[data-theme^='snow'] { --sky-1: #36486a; --sky-2: #141c2e; --glow: rgba(220, 235, 255, 0.18); }
-body[data-theme^='fog'] { --sky-1: #343c4a; --sky-2: #13171e; --glow: rgba(226, 232, 240, 0.12); }
+/* The classic look per weather state (v1.7): body[data-sky] = skyState(code, isDay) (src/shared/sky.ts), the same 18 states as
+   the glass wash, in the same colour family. Each sets only the opaque page gradient (.backdrop) and its glow. Computed in
+   tests/classicLook.test.ts: text 4.5:1 and graphics 3:1 on every state, and every two states at least CIE76 dE 5 apart. */
+body[data-sky='clear-day'] { --sky-1: #281b04; --sky-2: #110b02; --glow: rgba(255, 214, 140, 0.06); }
+body[data-sky='partly-day'] { --sky-1: #182431; --sky-2: #0a0f15; --glow: rgba(188, 205, 222, 0.07); }
+body[data-sky='overcast-day'] { --sky-1: #1a1b1d; --sky-2: #0b0b0c; --glow: rgba(96, 102, 111, 0.12); }
+body[data-sky='fog-day'] { --sky-1: #242424; --sky-2: #0f0f0f; --glow: rgba(219, 219, 219, 0.06); }
+body[data-sky='drizzle-day'] { --sky-1: #12243c; --sky-2: #080f19; --glow: rgba(97, 146, 208, 0.1); }
+body[data-sky='rain-day'] { --sky-1: #09172c; --sky-2: #040a13; --glow: rgba(38, 94, 183, 0.13); }
+body[data-sky='heavy-rain-day'] { --sky-1: #07173f; --sky-2: #030a1b; --glow: rgba(15, 52, 141, 0.15); }
+body[data-sky='storm-day'] { --sky-1: #252548; --sky-2: #10101e; --glow: rgba(32, 32, 62, 0.16); }
+body[data-sky='snow-day'] { --sky-1: #061d32; --sky-2: #020c15; --glow: rgba(232, 244, 255, 0.05); }
+body[data-sky='clear-night'] { --sky-1: #0b0713; --sky-2: #040308; --glow: rgba(76, 52, 135, 0.11); }
+body[data-sky='partly-night'] { --sky-1: #10141b; --sky-2: #07080b; --glow: rgba(41, 51, 69, 0.12); }
+body[data-sky='overcast-night'] { --sky-1: #090a0b; --sky-2: #040404; --glow: rgba(37, 39, 42, 0.12); }
+body[data-sky='fog-night'] { --sky-1: #0f0f0e; --sky-2: #060606; --glow: rgba(144, 143, 140, 0.08); }
+body[data-sky='drizzle-night'] { --sky-1: #040b14; --sky-2: #020408; --glow: rgba(20, 59, 109, 0.12); }
+body[data-sky='rain-night'] { --sky-1: #040f23; --sky-2: #02060f; --glow: rgba(5, 37, 97, 0.12); }
+body[data-sky='heavy-rain-night'] { --sky-1: #050f31; --sky-2: #020615; --glow: rgba(0, 12, 55, 0.13); }
+body[data-sky='storm-night'] { --sky-1: #1c1a41; --sky-2: #0c0b1b; --glow: rgba(14, 13, 32, 0.13); }
+body[data-sky='snow-night'] { --sky-1: #101a22; --sky-2: #070b0e; --glow: rgba(120, 160, 190, 0.07); }
 
 * { box-sizing: border-box; }
 
@@ -64,7 +78,7 @@ body {
 
 h1, h2, p { margin: 0; }
 button { font: inherit; color: inherit; }
-a { color: var(--accent); text-decoration: none; }
+a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .muted { color: var(--muted); }
@@ -281,7 +295,7 @@ a:hover { text-decoration: underline; }
 
 .link-button {
   border: 0; background: none; padding: 0; cursor: pointer;
-  color: var(--accent); font-size: 12px; font-weight: 500;
+  color: var(--link); font-size: 12px; font-weight: 500;
   display: inline-flex; align-items: center; gap: 4px;
 }
 .link-button:hover { text-decoration: underline; }
@@ -897,4 +911,20 @@ a:hover { text-decoration: underline; }
   html[data-material='glass'] .rain-summary.is-likely,
   html[data-material='glass'] .day-rain.is-wet { color: var(--wet); }
   html[data-material='glass'] .day.is-today .day-name { color: var(--today); }
+}
+
+/* ---------- Look (v1.7) ----------
+   Settings > Look: the Glass option is disabled while the system cannot show glass (src/shared/look.ts). */
+.segmented button:disabled { opacity: 0.45; cursor: not-allowed; }
+.segmented button:disabled:hover { background: transparent; color: var(--muted); }
+
+/* The classic Settings panel (1.7): text 4.5:1 on every weather background, also over a card blurred behind it
+   and on hovered buttons (tests/classicLook.test.ts). A dark layer under a lighter tint and sheen than 1.6 drew,
+   and solid muted text. The glass look's panel has its own rules and is not affected. */
+html:not([data-material='glass']) .settings-sheet {
+  --muted: #cbd5e1;
+  background-image:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(180deg, rgba(120, 145, 195, 0.14), rgba(30, 42, 70, 0.38));
+  background-color: rgba(13, 17, 27, 0.7);
 }

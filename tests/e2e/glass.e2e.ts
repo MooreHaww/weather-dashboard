@@ -1,4 +1,5 @@
-// v1.6 in the real window: glass (Windows' acrylic) where the PC allows it, otherwise the solid 1.5.1 look.
+// v1.6 in the real window: glass (Windows' acrylic) where the PC allows it, otherwise the solid (classic) look.
+// The seeds have no "appearance", so they load as a 1.6.1 user's file does: Glass chosen (1.7). Switching looks is in look.e2e.ts.
 // - The material is checked from outside the page: the window's DWM backdrop type (38) via its handle.
 // - Solid is forced for a test by NODE_OPTIONS=--require tests/e2e/support/fakeWindows10.cjs (os.release()
 //   says Windows 10); the packaged exe ignores NODE_OPTIONS, so nothing that ships can be switched this way.
@@ -534,7 +535,7 @@ describe('solid fallback (Windows 10, faked for the test)', () => {
     expect(await page.evaluate<string>(`window.appearance.current()`)).toBe('solid');
   });
 
-  it("looks exactly like 1.5.1: today's background, cards, text colours and tokens", async () => {
+  it("looks like 1.5.1 with 1.7's contrast fix: the weather's own background, cards, text colours and tokens", async () => {
     const look = await page.evaluate<Record<string, string>>(`(() => {
       const c = getComputedStyle(document.querySelector('#hero'));
       const r = getComputedStyle(document.documentElement);
@@ -551,8 +552,8 @@ describe('solid fallback (Windows 10, faked for the test)', () => {
       card: 'rgba(255, 255, 255, 0.055)',
       filter: 'blur(30px) saturate(1.4)',
       border: 'rgba(255, 255, 255, 0.09)',
-      muted: 'rgba(226, 232, 240, 0.62)',
-      link: 'rgb(96, 165, 250)',
+      muted: 'rgba(226, 232, 240, 0.78)', // 1.7 (was 0.62)
+      link: 'rgb(147, 197, 253)', // 1.7: --link #93c5fd (was the accent #60a5fa)
       tint: '',
     });
     expect(app.errors).toEqual([]);
