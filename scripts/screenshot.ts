@@ -5,9 +5,10 @@
 //
 // The weather decides the theme, so each scene is set up on purpose. The app is launched
 // with an injected script (the same technique the e2e tests use) that:
-//  - moves the clock: Date is shifted so London's local time reads the scene's time of day;
-//  - rewrites every /api/weather response: today's weather code, the hourly codes and rain
-//    chances, the 7-day codes and the day/night flag. Temperatures, wind and the rest stay
+//  - moves the clock: Date is shifted so London's local time reads the scene's time of day (since 1.7.1 local
+//    noon for clear and rain, local midnight for night, so none falls in sunset or dusk by accident);
+//  - rewrites every /api/weather response: today's weather code, the hourly codes, rain chances and
+//    amounts, the 7-day codes and the day/night flag. Temperatures, wind, sunrise, sunset and the rest stay
 //    as Open-Meteo sent them.
 // So these pictures show each theme; they are not a record of the real weather.
 // All three use the same window size (1360x900), the same city and favorites, and a clean
@@ -54,12 +55,12 @@ interface Scene {
 }
 
 const SCENES: Scene[] = [
-  { file: 'theme-clear.png', look: 'glass', theme: 'clear-day', time: '11:30', code: 0, rain: false },
-  { file: 'theme-night.png', look: 'glass', theme: 'clear-night', time: '22:30', code: 0, rain: false },
-  { file: 'theme-rain.png', look: 'glass', theme: 'rain-day', time: '15:20', code: 63, rain: true },
-  { file: 'classic-clear.png', look: 'classic', theme: 'clear-day', time: '11:30', code: 0, rain: false },
-  { file: 'classic-night.png', look: 'classic', theme: 'clear-night', time: '22:30', code: 0, rain: false },
-  { file: 'classic-rain.png', look: 'classic', theme: 'rain-day', time: '15:20', code: 63, rain: true },
+  { file: 'theme-clear.png', look: 'glass', theme: 'clear-day', time: '12:00', code: 0, rain: false },
+  { file: 'theme-night.png', look: 'glass', theme: 'clear-night', time: '00:00', code: 0, rain: false },
+  { file: 'theme-rain.png', look: 'glass', theme: 'rain-day', time: '12:00', code: 63, rain: true },
+  { file: 'classic-clear.png', look: 'classic', theme: 'clear-day', time: '12:00', code: 0, rain: false },
+  { file: 'classic-night.png', look: 'classic', theme: 'clear-night', time: '00:00', code: 0, rain: false },
+  { file: 'classic-rain.png', look: 'classic', theme: 'rain-day', time: '12:00', code: 63, rain: true },
 ];
 
 /** Runs in the page before the app's own scripts. */
@@ -77,6 +78,12 @@ function sceneScript(scene: Scene, skewMs: number): string {
     const [hh, mm] = scene.time.split(':').map(Number);
     // Rain peaks mid-afternoon and fades out; a dry day has next to none.
     const chance = (h) => (scene.rain ? Math.max(8, 92 - Math.abs(h - 16) * 9) : h % 3);
+    // The amount follows it: heavy at the peak, moderate around it, light on the way there, none on a dry day.
+    const amount = (h) => {
+      if (!scene.rain) return 0;
+      const away = Math.abs(h - 16);
+      return away === 0 ? 9 : away === 1 ? 5 : away === 2 ? 3 : away <= 5 ? 1 : 0;
+    };
 
     const realFetch = window.fetch.bind(window);
     window.fetch = async (input, init) => {
@@ -93,6 +100,7 @@ function sceneScript(scene: Scene, skewMs: number): string {
         if (!t.startsWith(today)) return;
         const p = chance(Number(t.slice(11, 13)));
         d.hourly.precipitationProbability[i] = p;
+        if (d.hourly.precipitation) d.hourly.precipitation[i] = amount(Number(t.slice(11, 13)));
         d.hourly.weatherCode[i] = scene.rain && p >= 40 ? scene.code : scene.rain ? 3 : 0;
       });
       d.daily.weatherCode = d.daily.weatherCode.map(() => scene.code);
@@ -123,7 +131,7 @@ async function capture(scene: Scene): Promise<void> {
     await page.waitFor(`${temperaturePainted()} > 150`, 10_000);
     if (scene.rain) await page.waitFor(`${countPixels('rain-chart', COLORS.rainBars)} > 200`, 10_000);
     await showBackdrop(app, 'grey'); // also brings the app to the front and focuses it
-    await new Promise((r) => setTimeout(r, 1500)); // let animations settle
+    await new Promise((r) => setTimeout(r, 2500)); // let animations settle (the sky's fade is 2 s)
     if (app.errors.length) throw new Error(`Page errors:\n${app.errors.join('\n')}`);
 
     const out = path.join(__dirname, '..', 'docs', scene.file);

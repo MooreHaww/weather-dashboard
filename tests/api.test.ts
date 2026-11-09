@@ -60,7 +60,21 @@ describe('GET /api/weather', () => {
     expect(url).toContain('latitude=35.69');
     expect(url).toContain('longitude=139.69');
     expect(url).toContain('timezone=auto');
-    expect(decodeURIComponent(url)).toContain('hourly=temperature_2m,apparent_temperature,precipitation_probability,weather_code,is_day');
+    // The amount in mm, with the same request: no precipitation_unit is asked for, so Open-Meteo's mm applies in both unit systems.
+    expect(data.hourly.precipitation).toHaveLength(data.hourly.time.length);
+    expect(data.hourly.precipitation.some((v: number) => v > 0)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(url).not.toContain('precipitation_unit');
+    expect(decodeURIComponent(url)).toContain('hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day');
+  });
+
+  it('still answers when Open-Meteo leaves out the hourly amount: the field is simply absent (the page then shows the chance only)', async () => {
+    const raw = JSON.parse(await fixture('forecast-tokyo.json'));
+    delete raw.hourly.precipitation;
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(raw), { status: 200 }));
+    const res = await request(makeApp()).get('/api/weather?lat=1&lon=2').expect(200);
+    expect(res.body.data.hourly).not.toHaveProperty('precipitation');
+    expect(res.body.data.hourly.precipitationProbability).toHaveLength(7 * 24);
   });
 
   it('retries once when Open-Meteo answers 503, then succeeds', async () => {

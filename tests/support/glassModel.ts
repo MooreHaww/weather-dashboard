@@ -1,12 +1,15 @@
-// The clear glass look (v1.6) as layers, read from styles.css: what is behind every text and graphic, from the desktop
-// up. Used by tests/glassContrast.test.ts. Everything on a box is checked against CLEAR_RULE (src/shared/contrast.ts):
-// primary text and numbers 4.5:1 over grey and dark desktops and 3:1 over white, secondary text and graphics 3:1 over
-// grey and dark. Each box is checked with no outer wash and under every weather state's wash and glow, with and without
-// the boxes' saturate(). Each layer counts at its strongest point (the top of a gradient, the peak of a glow).
+// The clear glass look (v1.6) as layers: what is behind every text and graphic, from the desktop up. The boxes come from styles.css,
+// the wash from skyLook (src/shared/sky.ts). Used by tests/glassContrast.test.ts. Everything on a box is checked against CLEAR_RULE
+// (src/shared/contrast.ts): primary text and numbers 4.5:1 over grey and dark desktops and 3:1 over white, secondary text and graphics
+// 3:1 over grey and dark. Each box is checked with no outer wash and under the wash of all 54 looks and the midpoint of every blend,
+// with and without the boxes' saturate(). Each layer counts at its strongest point.
 // Windows' acrylic gets no credit. Text on the bare glass (app name, sidebar titles, footer) has no box: bareGlass()
 // lists it for the report; the rule above is for boxes.
 
 import { compose, contrast, parseColor, ROW_RULE, ROW_RULE_WASHED, ruleCheck, type ItemKind, type Layer, type Rgba } from '../../src/shared/contrast';
+import { PHASES } from '../../src/shared/phase';
+import { RAIN_BLUES, RAIN_DRY } from '../../src/shared/rain';
+import { blendedLook, lookVars, skyLook, SKIES, type SkyLook } from '../../src/shared/sky';
 
 /** Custom properties of the first rule whose selector is exactly `selector`. */
 export function tokensOf(css: string, selector: string): Record<string, string> {
@@ -17,7 +20,19 @@ export function tokensOf(css: string, selector: string): Record<string, string> 
 }
 
 export const GLASS = "html[data-material='glass']";
-export const STATE_SELECTOR = (state: string) => `${GLASS} body[data-sky='${state}']`;
+
+/** Every look as the app draws it: "clear-noon" for the 54, and "clear-noon>afternoon" for the midpoint of each neighbouring pair of phases (54 more). */
+export function allLooks(): Record<string, SkyLook> {
+  const out: Record<string, SkyLook> = {};
+  for (const sky of SKIES) {
+    PHASES.forEach((p, i) => {
+      out[`${sky}-${p}`] = skyLook(sky, p);
+      const next = PHASES[(i + 1) % PHASES.length]!;
+      out[`${sky}-${p}>${next}`] = blendedLook(sky, p, next, 0.5);
+    });
+  }
+  return out;
+}
 
 export interface Item {
   name: string;
@@ -30,19 +45,13 @@ export interface Place {
 }
 export interface SkyTokens {
   tint: Rgba;
-  /** The state's own --sky-alpha in styles.css. */
-  base: number;
-  /** What is drawn: base x --wash-strength, at most WASH_MAX (same for the glow's alpha). */
+  /** What is drawn. */
   alpha: number;
-  glow: Rgba;
 }
-
-/** The cap in the .backdrop rule: no wash or glow alpha above this, whatever --wash-strength says. */
-export const WASH_MAX = 0.35;
 
 export interface GlassModel {
   boxFill: Rgba;
-  /** 'default' (before any weather) and every state from styles.css, in file order. */
+  /** 'default' (before any weather, from styles.css), the 54 looks and the blend midpoints, as the custom properties the app sets. */
   states: Record<string, SkyTokens>;
   /** The places on a box, built with the box fill at `boxAlpha` (default: the CSS value). */
   places(boxAlpha?: number): Record<string, Place>;
@@ -50,7 +59,7 @@ export interface GlassModel {
   bareGlass(): Item[];
   /** The sidebar's rows on the bare glass (1.6.1): only the row's own tint, if any, over the desktop and the wash. Checked against ROW_RULE. */
   rows(): Record<string, Place>;
-  /** What lies between the desktop and the boxes: nothing, or a state's wash and its glow at full strength. */
+  /** What lies between the desktop and the boxes: nothing, or a state's wash. */
   outer(state: string | null): Layer[];
 }
 
@@ -67,21 +76,11 @@ export function glassModel(css: string, chartsSource: string): GlassModel {
   const sat = (filter: string): Layer => ({ saturate: Number(/saturate\((\d+)%\)/.exec(filter)![1]) / 100 });
   const boxFill = parseColor(g('--box-fill'));
 
-  // What is drawn: each state's alpha and glow times --wash-strength, capped at WASH_MAX (as in the .backdrop rule).
-  const strength = Number(g('--wash-strength'));
-  const skyOf = (t: Record<string, string>): SkyTokens => {
-    const pick = (k: string) => t[k] ?? glass[k]!;
-    const base = Number(pick('--sky-alpha'));
-    const glow = parseColor(pick('--sky-glow'));
-    return {
-      tint: parseColor(pick('--sky-tint')),
-      base,
-      alpha: Math.min(WASH_MAX, base * strength),
-      glow: { ...glow, a: Math.min(WASH_MAX, glow.a * strength) },
-    };
-  };
-  const states: Record<string, SkyTokens> = { default: skyOf(glass) };
-  for (const m of css.matchAll(/html\[data-material='glass'\] body\[data-sky='([\w-]+)'\] \{/g)) states[m[1]!] = skyOf(tokensOf(css, STATE_SELECTOR(m[1]!)));
+  const states: Record<string, SkyTokens> = { default: { tint: parseColor(glass['--sky-tint']!), alpha: Number(glass['--sky-alpha']) } };
+  for (const [name, look] of Object.entries(allLooks())) {
+    const vars = lookVars(look);
+    states[name] = { tint: parseColor(vars['--sky-tint']!), alpha: Number(vars['--sky-alpha']) };
+  }
 
   const text = root['--text']!;
   const muted = g('--muted');
@@ -115,6 +114,10 @@ export function glassModel(css: string, chartsSource: string): GlassModel {
           G('temperature line', series('temperature')),
           G('feels-like line', series('feelsLike')),
           G('rain bar, highest chance', series('rain')),
+          G('rain bar, light', RAIN_BLUES.light),
+          G('rain bar, moderate', RAIN_BLUES.moderate),
+          G('rain bar, heavy', RAIN_BLUES.heavy),
+          G('rain bar, dry hour outline', RAIN_DRY.outline),
           G('current-time dot', root['--temp']!),
           G('purple pin', root['--location']!),
           G('gold star', root['--gold']!),
@@ -176,7 +179,7 @@ export function glassModel(css: string, chartsSource: string): GlassModel {
     outer(state) {
       if (state === null) return [];
       const s = states[state]!;
-      return [{ ...s.tint, a: s.alpha }, s.glow, s.glow]; // the two glows overlap in places: both at full strength
+      return [{ ...s.tint, a: s.alpha }];
     },
   };
 }
@@ -246,24 +249,26 @@ export function requiredBoxAlpha(m: GlassModel): number | null {
   return hi;
 }
 
-/** A state's wash over flat grey #808080 (the screenshots' backdrop), glow left out. */
+/** A state's wash over flat grey #808080 (the screenshots' backdrop). */
 export function overGrey(s: SkyTokens): Rgba {
   return compose('#808080', [{ ...s.tint, a: s.alpha }]);
 }
 
-/** CIE76 colour difference (sRGB -> Lab, D65). */
+/** CIE Lab of a colour (sRGB, D65). */
+export function lab(c: Rgba): [number, number, number] {
+  const [r, g, bl] = [c.r, c.g, c.b].map((v) => {
+    const x = v / 255;
+    return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  const X = (0.4124 * r + 0.3576 * g + 0.1805 * bl) / 0.95047;
+  const Y = 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  const Z = (0.0193 * r + 0.1192 * g + 0.9505 * bl) / 1.08883;
+  const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
+  return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+}
+
+/** CIE76 colour difference. */
 export function deltaE(a: Rgba, b: Rgba): number {
-  const lab = (c: Rgba) => {
-    const [r, g, bl] = [c.r, c.g, c.b].map((v) => {
-      const x = v / 255;
-      return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-    }) as [number, number, number];
-    const X = (0.4124 * r + 0.3576 * g + 0.1805 * bl) / 0.95047;
-    const Y = 0.2126 * r + 0.7152 * g + 0.0722 * bl;
-    const Z = (0.0193 * r + 0.1192 * g + 0.9505 * bl) / 1.08883;
-    const f = (t: number) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116);
-    return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
-  };
   const [l1, a1, b1] = lab(a);
   const [l2, a2, b2] = lab(b);
   return Math.hypot(l1! - l2!, a1! - a2!, b1! - b2!);

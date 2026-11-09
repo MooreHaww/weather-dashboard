@@ -15,7 +15,7 @@ let app: LaunchedApp;
 let page: AppPage;
 
 const text = (selector: string) => page.evaluate<string>(`document.querySelector(${JSON.stringify(selector)}).textContent.trim()`);
-const rainValues = () => page.evaluate<[string, number][]>(`JSON.parse(document.getElementById('rain-data').dataset.values)`);
+const rainValues = () => page.evaluate<[string, number, number | null][]>(`JSON.parse(document.getElementById('rain-data').dataset.values)`);
 const tempValues = () => page.evaluate<[string, number, number][]>(`JSON.parse(document.getElementById('temp-data').dataset.values)`);
 
 /** Wait until the charts have actually painted their data (animations finish within ~0.5 s). */
@@ -29,7 +29,7 @@ async function expectChartsDrawn() {
   if (maxRain >= 5) {
     await page.waitFor(`${countPixels('rain-chart', COLORS.rainBars)} > 30`, 8000);
   } else {
-    expect(await text('#rain-summary')).toMatch(/^No rain expected/);
+    expect(await text('#rain-summary')).toMatch(/^No rain expected · highest chance \d+% at |% chance of /);
   }
 }
 
@@ -97,10 +97,32 @@ describe('Weather Dashboard (built app)', () => {
 
     // The summary line matches that day's data.
     const summary = await text('#rain-summary');
-    const likely = rain.find(([, p]) => p >= 50);
-    if (likely) expect(summary).toMatch(/^Rain likely at \d{1,2} (AM|PM) \(\d+%\)$/);
+    const likely = rain.find(([, p, mm]) => p >= 50 && (mm === null || mm >= 0.1));
+    if (likely) expect(summary).toMatch(/^\d+% chance of (light |moderate |heavy )?rain around \d{1,2} (AM|PM)( · about \d+\.\d mm)$/);
     else expect(summary).not.toMatch(/now|rest of today/);
     await expectChartsDrawn();
+  });
+
+  it('the rain box: both numbers in the headline, a legend, and each hour by keyboard', async () => {
+    expect(await text('#rain-summary')).toMatch(/^No rain expected · highest chance \d+% at | · about \d+\.\d mm$/);
+    const legend = await page.evaluate<string[]>(`[...document.getElementById('rain-chart').closest('.card').querySelectorAll('.legend span')].map((s) => s.textContent.trim()).filter(Boolean)`);
+    expect(legend).toEqual(['Light', 'Moderate', 'Heavy']);
+    expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#rain-data th')].map((h) => h.textContent)`)).toEqual(['Time', 'Chance of rain', 'Amount', 'Intensity']);
+    const label = () => page.evaluate<string>(`document.getElementById('rain-chart').getAttribute('aria-label')`);
+    const send = (js: string) => page.evaluate(`document.getElementById('rain-chart').dispatchEvent(${js})`);
+    const HOUR = /^\d{1,2} (AM|PM) · \d+% chance · \d+\.\d mm · (none|light|moderate|heavy)$/;
+    expect(await label()).toMatch(/arrow keys/);
+    await send(`new FocusEvent('focus')`);
+    const first = await label();
+    expect(first).toMatch(HOUR);
+    await send(`new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true })`);
+    expect(await label()).toMatch(HOUR);
+    expect(await label()).not.toBe(first);
+    await send(`new KeyboardEvent('keydown', { key: 'ArrowLeft', cancelable: true })`);
+    expect(await label()).toBe(first);
+    await send(`new FocusEvent('blur')`);
+    expect(await label()).toMatch(/arrow keys/);
+    expect(app.errors).toEqual([]);
   });
 
   it('selects days with the keyboard (arrows, Home, End)', async () => {

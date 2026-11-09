@@ -1,11 +1,13 @@
-// The classic look (v1.7) as layers, read from styles.css: each weather state's opaque page background and what sits on
-// it. Used by tests/classicLook.test.ts. The page background is opaque, so contrast is exact: no worst-case desktops.
+// The classic look (v1.7) as layers: each look's opaque page background from skyLook (src/shared/sky.ts) and what sits on it, from
+// styles.css. All 54 looks and the blend midpoints. Used by tests/classicLook.test.ts. The page background is opaque, so contrast is exact: no worst-case desktops.
 // Each state's background is checked at its lightest point (--sky-1 under both glows at their peak: light text is
 // hardest there) and at its darkest (--sky-2). Text needs 4.5:1; graphics and large text 3:1.
 // Left out on purpose, as WCAG does: decorative and deliberately faint parts (DECORATIVE below) and disabled controls.
 
 import { compose, contrast, parseColor, type Layer, type Rgba } from '../../src/shared/contrast';
-import { tokensOf } from './glassModel';
+import { RAIN_BLUES, RAIN_DRY } from '../../src/shared/rain';
+import { lookVars } from '../../src/shared/sky';
+import { allLooks, tokensOf } from './glassModel';
 
 export type ClassicKind = 'text' | 'graphic';
 export const CLASSIC_NEED: Record<ClassicKind, number> = { text: 4.5, graphic: 3 };
@@ -45,9 +47,9 @@ export function classicModel(css: string, chartsSource: string) {
   const classic = classicCss(css);
   const root = tokensOf(classic, ':root');
   const states: Record<string, ClassicState> = {};
-  for (const m of classic.matchAll(/body\[data-sky='([\w-]+)'\] \{/g)) {
-    const t = tokensOf(classic, `body[data-sky='${m[1]}']`);
-    states[m[1]!] = { sky1: parseColor(t['--sky-1']!), sky2: parseColor(t['--sky-2']!), glow: parseColor(t['--glow']!) };
+  for (const [name, look] of Object.entries(allLooks())) {
+    const t = lookVars(look);
+    states[name] = { sky1: parseColor(t['--sky-1']!), sky2: parseColor(t['--sky-2']!), glow: parseColor(t['--glow']!) };
   }
 
   /** The state's background at its lightest point and at its darkest. */
@@ -88,6 +90,10 @@ export function classicModel(css: string, chartsSource: string) {
         G('temperature line', series('temperature')),
         G('feels-like line', series('feelsLike')),
         G('rain bar, highest chance', series('rain')),
+        G('rain bar, light', RAIN_BLUES.light),
+        G('rain bar, moderate', RAIN_BLUES.moderate),
+        G('rain bar, heavy', RAIN_BLUES.heavy),
+        G('rain bar, dry hour outline', RAIN_DRY.outline),
         G('current-time dot', root['--temp']!),
         G('purple pin', root['--location']!),
         G('gold star', root['--gold']!),

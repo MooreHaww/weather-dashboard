@@ -1,6 +1,6 @@
 // The Rain and Temperature cards for the selected day (today by default).
 
-import { rainHoursForDay, rainSummary } from '../../shared/rain';
+import { formatMm, intensity, rainHoursForDay, rainSummary } from '../../shared/rain';
 import { effectiveStep, labelHours, labelIndices } from '../../shared/labelStep';
 import { passedInfo, type NowMarker } from '../../shared/passed';
 import { formatHour, formatTime, shortDate, weekday } from '../../shared/time';
@@ -96,11 +96,14 @@ export function renderDayDetails(w: WeatherData, day: string, nowLocal: string, 
   renderRainChart($<HTMLCanvasElement>('#rain-chart'), hours, rain.at, format);
   table(
     'rain-data',
-    `Hourly chance of rain, ${name}`,
-    ['Time', 'Chance of rain'],
-    hours.map((h) => [hour(h.time), `${h.probability}%`]),
+    `Hourly chance of rain and amount, ${name}`,
+    hours.some((h) => h.mm !== null) ? ['Time', 'Chance of rain', 'Amount', 'Intensity'] : ['Time', 'Chance of rain'],
+    hours.map((h) => {
+      const row = [hour(h.time), `${h.probability}%`];
+      return hours.some((x) => x.mm !== null) ? [...row, h.mm === null ? 'Unknown' : formatMm(h.mm), h.mm === null ? 'Unknown' : intensity(h.mm)] : row;
+    }),
   );
-  $('#rain-data').dataset.values = JSON.stringify(hours.map((h) => [h.time, h.probability]));
+  $('#rain-data').dataset.values = JSON.stringify(hours.map((h) => [h.time, h.probability, h.mm]));
 
   // ----- Temperature -----
   const points = tempPoints(w, day);

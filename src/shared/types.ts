@@ -57,6 +57,8 @@ export interface HourlySeries {
   /** "Feels like" temperature per hour. */
   apparentTemperature: number[];
   precipitationProbability: (number | null)[];
+  /** Precipitation per hour in mm (rain, showers and snow as water). Older data has none. */
+  precipitation?: (number | null)[];
   weatherCode: number[];
   isDay: boolean[];
 }

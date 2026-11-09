@@ -12,7 +12,8 @@ import {
   type WeatherData,
   type WindUnit,
 } from '../shared/types';
-import { skyState } from '../shared/sky';
+import { phaseBlend, sunTimesOn } from '../shared/phase';
+import { skyNow } from '../shared/sky';
 import { describeWeather } from '../shared/weatherCodes';
 import { api, ApiError } from './api';
 import { setupAppearance } from './appearance';
@@ -102,7 +103,7 @@ function render(): void {
   app.drawnHour = nowLocal.slice(0, 13);
   const info = describeWeather(w.current.weatherCode);
   document.body.dataset.theme = `${info.theme}-${w.current.isDay ? 'day' : 'night'}`;
-  document.body.dataset.sky = skyState(w.current.weatherCode, w.current.isDay); // the background in both looks (styles.css)
+  paintSky(w, nowLocal);
   document.title = `${place.name} · ${round(w.current.temperature)}${w.unitLabels.temperature} · Weather Dashboard`;
 
   renderHero($('#hero'), place, w, isFavorite(place), nowLocal, app.state.settings.timeFormat);
@@ -115,6 +116,16 @@ function render(): void {
   renderUnits();
   renderUpdated();
   renderCards();
+}
+
+/** The background in both looks, from the shown city's weather and its own time of day. Called on each draw and each minute. */
+function paintSky(w: WeatherData, nowLocal: string): void {
+  const sun = sunTimesOn(w.daily, nowLocal);
+  const { state, vars } = skyNow(w.current.weatherCode, phaseBlend(nowLocal, sun.sunrise, sun.sunset, w.current.isDay));
+  document.body.dataset.sky = state;
+  for (const [name, value] of Object.entries(vars)) {
+    if (document.body.style.getPropertyValue(name) !== value) document.body.style.setProperty(name, value);
+  }
 }
 
 /** Switch the rain and temperature cards to another forecast day. */
@@ -245,6 +256,7 @@ function tickNow(): void {
     render();
     return;
   }
+  paintSky(w, nowLocal);
   const marker = nowMarker(w, currentDay(w, nowLocal), nowLocal);
   moveTempNow(marker);
   updateNowDot(nowLocal, app.state.settings.timeFormat, marker !== null);

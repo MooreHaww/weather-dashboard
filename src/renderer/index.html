@@ -81,9 +81,14 @@
           <section class="card chart-card" aria-labelledby="rain-title">
             <header class="card-header">
               <h2 class="section-title" id="rain-title">Rain today</h2>
+              <span class="legend" aria-hidden="true">
+                <span><i class="swatch-rain swatch-light"></i>Light</span>
+                <span><i class="swatch-rain swatch-moderate"></i>Moderate</span>
+                <span><i class="swatch-rain swatch-heavy"></i>Heavy</span>
+              </span>
             </header>
             <p id="rain-summary" class="rain-summary"></p>
-            <div class="chart-wrap"><canvas id="rain-chart" aria-hidden="true"></canvas></div>
+            <div class="chart-wrap"><canvas id="rain-chart" role="img" tabindex="0" aria-label="Rain by hour. Use the left and right arrow keys to read each hour."></canvas></div>
             <table id="rain-data" class="sr-only"></table>
           </section>
 

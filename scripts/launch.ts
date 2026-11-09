@@ -368,7 +368,7 @@ export const COLORS = {
   temperature: 'a > 150 && r > 220 && g > 140 && g < 210 && b < 120', // #FFB547
   feelsLike: 'a > 120 && r > 160 && r < 225 && g > 150 && g < 205 && b > 225', // #C4B5FD
   passed: 'a > 60 && Math.abs(r - 148) < 14 && Math.abs(g - 163) < 14 && Math.abs(b - 184) < 14', // grey for hours that have passed
-  rainBars: 'a > 40 && r < 160 && g > 150 && b > 220', // #5AB0FF / #7CC4FF
+  rainBars: '(a > 40 && g > 120 && b > 220 && b > r) || (a > 120 && r > 150 && g > 165 && b > 185 && b > r)', // #5AB0FF / #7CC4FF, the three intensity blues (#cde6ff, #7ebcfb, #3d8bf2), and the dry hours' outline (#aab6c8)
 };
 
 /**

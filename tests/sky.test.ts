@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { skyOf, skyState } from '../src/shared/sky';
+import { PHASES, phaseBlend } from '../src/shared/phase';
+import { lookVars, skyLook, skyNow, skyOf, skyState, SKIES, WASH_MAX, WASH_STRENGTH } from '../src/shared/sky';
 import { describeWeather } from '../src/shared/weatherCodes';
 
 // Every code on Open-Meteo's list (https://open-meteo.com/en/docs, "WMO Weather interpretation codes", read 2026-11-07).
@@ -22,10 +23,48 @@ describe('the glass sky state from the weather code and is_day', () => {
     expect(Object.values(groups).flat().sort((a, b) => a - b)).toEqual(OPEN_METEO_CODES);
   });
 
-  it('is_day picks the day or night variant', () => {
-    expect(skyState(0, true)).toBe('clear-day');
-    expect(skyState(0, false)).toBe('clear-night');
-    expect(skyState(99, false)).toBe('storm-night');
+  it('the weather group and the phase name the state: 54 of them, each with its own look', () => {
+    expect(skyState(0, 'noon')).toBe('clear-noon');
+    expect(skyState(1, 'morning')).toBe('partly-morning');
+    expect(skyState(99, 'night')).toBe('storm-night');
+    const all = new Set<string>();
+    for (const sky of SKIES) {
+      for (const phase of PHASES) {
+        const v = lookVars(skyLook(sky, phase));
+        expect(Object.keys(v).sort()).toEqual(['--glow', '--sky-1', '--sky-2', '--sky-alpha', '--sky-tint']);
+        all.add(JSON.stringify(v));
+      }
+    }
+    expect(all.size).toBe(54);
+  });
+
+  it('every listed weather code gets a look, and skyNow names the nearest phase and blends the look', () => {
+    for (const code of OPEN_METEO_CODES) for (const p of PHASES) expect(skyLook(skyOf(code), p).alpha).toBeGreaterThan(0);
+    // 15 minutes around 09:00 solar: London-like sun 07:00-17:00, noon 12:00, boundary morning > noon at 10:30.
+    const at = (t: string) => skyNow(0, phaseBlend(`2026-11-09T${t}`, '2026-11-09T07:00', '2026-11-09T17:00', true));
+    expect(at('10:00').state).toBe('clear-morning');
+    expect(at('10:31').state).toBe('clear-noon');
+    expect(at('10:00').vars).toEqual(lookVars(skyLook('clear', 'morning')));
+    expect(at('11:00').vars).toEqual(lookVars(skyLook('clear', 'noon')));
+    expect(at('10:30').vars).not.toEqual(at('10:00').vars);
+    expect(at('10:30').vars).not.toEqual(at('11:00').vars);
+  });
+
+  it('WASH_STRENGTH is one number that scales every glass alpha before the cap, and leaves the classic look alone', () => {
+    expect(WASH_STRENGTH).toBe(1);
+    expect(WASH_MAX).toBe(0.35);
+    for (const sky of SKIES) {
+      for (const phase of PHASES) {
+        const one = skyLook(sky, phase, 1);
+        const two = skyLook(sky, phase, 2);
+        const half = skyLook(sky, phase, 0.5);
+        expect(two.alpha).toBeCloseTo(Math.min(WASH_MAX, one.alpha * 2), 6);
+        expect(half.alpha).toBeCloseTo(one.alpha / 2, 6);
+        expect(two.tint).toEqual(one.tint);
+        expect(two.sky1).toEqual(one.sky1);
+        expect(skyLook(sky, phase).alpha).toBeCloseTo(one.alpha, 6); // the default is the constant
+      }
+    }
   });
 
   it('97 "Heavy thunderstorm" is the one listed code describeWeather does not know; it is a storm here', () => {

@@ -1,17 +1,16 @@
-// The clear glass look (v1.6), computed from styles.css itself: the faint weather wash on the outer glass, the
-// translucent boxes, and the contrast of everything on a box under CLEAR_RULE (src/shared/contrast.ts): primary text
-// and numbers 4.5:1 over grey and dark desktops and 3:1 over white; secondary text and graphics 3:1 over grey and
-// dark. Checked with no wash and under every state's wash, with no credit for Windows' acrylic. The model is
-// tests/support/glassModel.ts.
+// The clear glass look (v1.6, wash since 1.7.1): the weather and time-of-day wash on the outer glass (skyLook, src/shared/sky.ts), the
+// translucent boxes (styles.css), and the contrast of everything on a box under CLEAR_RULE (src/shared/contrast.ts): primary text
+// and numbers 4.5:1 over grey and dark desktops and 3:1 over white; secondary text and graphics 3:1 over grey and dark. Checked with no
+// wash and under all 54 looks and the blend midpoints, with no credit for Windows' acrylic. The model is tests/support/glassModel.ts.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CLEAR_RULE, compose, contrast, minTintAlpha, parseColor, ROW_RULE, RULE_BACKDROPS, ruleCheck, worstContrast, WORST_BACKDROPS } from '../src/shared/contrast';
-import { SKIES } from '../src/shared/sky';
-import { deltaE, GLASS, glassModel, requiredBoxAlpha, tokensOf, WASH_MAX, worstRatios, worstRowRatios } from './support/glassModel';
+import { PHASES } from '../src/shared/phase';
+import { SKIES, WASH_MAX, type Sky } from '../src/shared/sky';
+import { deltaE, GLASS, glassModel, lab, requiredBoxAlpha, tokensOf, worstRatios, worstRowRatios } from './support/glassModel';
 
-const WASH_STRENGTH = 3;
 // 1.6.1 removed the boxes' top gradient (it was the grain on screen). The old model credited its peak (5 % white) to every faint part; now the
 // faintest ones over a black desktop, with no wash, are up to 3 % under 1.5.1's ratio (measured 2.1 %). Anything more fails.
 const FAINT_TOLERANCE = 0.97;
@@ -19,77 +18,105 @@ const FAINT_TOLERANCE = 0.97;
 const src = (...p: string[]) => readFileSync(path.join(__dirname, '..', 'src', ...p), 'utf8');
 const css = src('renderer', 'styles.css');
 const model = glassModel(css, src('renderer', 'charts.ts'));
-const STATES = SKIES.flatMap((s) => [`${s}-day`, `${s}-night`]);
+const STATES = SKIES.flatMap((s) => PHASES.map((p) => `${s}-${p}`));
+const MIDPOINTS = SKIES.flatMap((s) => PHASES.map((p, i) => `${s}-${p}>${PHASES[(i + 1) % 6]}`));
+const DARK = parseColor('#202020');
+const GREY = parseColor('#808080');
+/** What a state's wash gives over a desktop. */
+const over = (state: string, desktop: typeof DARK) => {
+  const s = model.states[state]!;
+  return compose(desktop, [{ ...s.tint, a: s.alpha }]);
+};
+/** The lightness the wash adds over a desktop (delta L*). */
+const addedL = (state: string, desktop = DARK) => lab(over(state, desktop))[0] - lab(desktop)[0];
+/** Item 1's limits over #202020, per group, for every phase and midpoint. Tighter than asked for "partly" (mainly clear and partly cloudy are one group, so 2, not 3). */
+const MOST: Record<Sky, number> = { clear: 2, partly: 2, overcast: 6, fog: Infinity, drizzle: 6, rain: 6, 'heavy-rain': 6, storm: 6, snow: 8 };
+const groupOf = (state: string) => SKIES.find((s) => state.startsWith(`${s}-`))!;
 
-describe('glass: the faint weather wash on the outer glass', () => {
-  it('styles.css has one rule per state (9 skies, day and night) with a colour, a base alpha of 0.04 to 0.16 and a faint glow', () => {
-    expect(Object.keys(model.states).sort()).toEqual(['default', ...STATES].sort());
+describe('glass: the wash follows the weather and the time of day, and only fog whitens the glass', () => {
+  it('has the 54 looks and 54 blend midpoints, from skyLook; no CSS rule per state any more', () => {
+    expect(Object.keys(model.states).sort()).toEqual(['default', ...STATES, ...MIDPOINTS].sort());
     for (const [name, s] of Object.entries(model.states)) {
       expect(s.tint.a, name).toBe(1);
-      expect(s.base, name).toBeGreaterThanOrEqual(0.03);
-      expect(s.base, name).toBeLessThanOrEqual(0.16);
-      expect(s.glow.a / WASH_STRENGTH, name).toBeLessThanOrEqual(0.08);
-    }
-  });
-
-  it('ONE multiplier, --wash-strength (3), scales every wash and glow alpha, capped at 0.35: clear day 0.12, storm night at the cap', () => {
-    expect(tokensOf(css, GLASS)['--wash-strength']).toBe(String(WASH_STRENGTH));
-    expect(css.match(/--wash-strength:/g)).toHaveLength(1); // set in one place only
-    const backdrop = css.slice(css.indexOf(`${GLASS} .backdrop {`));
-    const rule = backdrop.slice(0, backdrop.indexOf('}'));
-    expect(rule).toContain('min(0.35, var(--sky-alpha) * var(--wash-strength))');
-    expect(rule).toContain('min(0.35, alpha * var(--wash-strength))');
-    expect(rule).not.toMatch(/var\(--sky-glow\), transparent/); // the glows only through --wash-glow
-    for (const [name, s] of Object.entries(model.states)) {
-      expect(s.alpha, name).toBeCloseTo(Math.min(WASH_MAX, s.base * WASH_STRENGTH), 6);
+      expect(s.alpha, name).toBeGreaterThan(0);
       expect(s.alpha, name).toBeLessThanOrEqual(WASH_MAX);
     }
-    expect(model.states['clear-day']!.alpha).toBeCloseTo(0.12, 6);
-    expect(model.states['storm-night']!.alpha).toBe(WASH_MAX);
+    expect(css.replace(/\/\*[\s\S]*?\*\//g, '')).not.toContain('body[data-sky');
+    expect(css).not.toContain('--wash-strength');
+    expect(css).not.toContain('--sky-glow');
+    expect(css).toContain(`${GLASS} .backdrop { background: rgb(from var(--sky-tint) r g b / var(--sky-alpha)); }`);
   });
 
-  it('a clear day is the faintest; night is one step denser than its day; thunderstorm and heavy night rain are the densest', () => {
-    // The states' own values (styles.css) keep the order strictly; what is drawn keeps it too, except where the 0.35 cap makes states equal.
-    const b = (s: string) => model.states[s]!.base;
-    const a = (s: string) => model.states[s]!.alpha;
-    for (const s of STATES) if (s !== 'clear-day') expect(b('clear-day'), s).toBeLessThan(b(s));
-    for (const s of STATES) if (s !== 'clear-day') expect(a('clear-day'), s).toBeLessThan(a(s));
-    for (const sky of SKIES) expect(b(`${sky}-night`), sky).toBeGreaterThan(b(`${sky}-day`));
-    for (const sky of SKIES) expect(a(`${sky}-night`), sky).toBeGreaterThanOrEqual(a(`${sky}-day`));
-    const top = Math.max(...STATES.map(b));
-    expect(b('storm-night')).toBe(top);
-    expect(b('heavy-rain-night')).toBe(top);
-    expect(a('storm-night')).toBe(Math.max(...STATES.map(a)));
-    for (const s of STATES.filter((x) => x.endsWith('-day') && x !== 'storm-day')) expect(b(s), s).toBeLessThan(b('storm-day'));
-    expect(b('heavy-rain-day')).toBeGreaterThan(b('rain-day'));
-    expect(b('rain-day')).toBeGreaterThan(b('drizzle-day'));
-    // fog-day used to be denser than overcast-day; at strength 3 it had to be lowered below it to keep the sidebar bars at 3:1.
-    expect(model.states['fog-day']!.glow.a).toBe(0); // flat
-  });
-
-  it('only a clear night is violet, and only a clear day is warm', () => {
-    const hue = (s: string) => model.states[s]!.tint;
-    const violet = (c: { r: number; g: number; b: number }) => c.r > c.g + 10 && c.b > c.r + 20;
-    expect(violet(hue('clear-night'))).toBe(true);
-    for (const s of STATES) if (s !== 'clear-night' && !s.startsWith('storm')) expect(violet(hue(s)), s).toBe(false);
-    const warm = (c: { r: number; g: number; b: number }) => c.r > c.b + 60;
-    expect(warm(hue('clear-day'))).toBe(true);
-    for (const s of STATES) if (s !== 'clear-day') expect(warm(hue(s)), s).toBe(false);
-  });
-
-  it('every state keeps its own colour (the wash colours themselves differ by CIE76 ΔE >= 10)', () => {
-    const low: string[] = [];
-    for (let i = 0; i < STATES.length; i++) {
-      for (let j = i + 1; j < STATES.length; j++) {
-        const d = deltaE(model.states[STATES[i]!]!.tint, model.states[STATES[j]!]!.tint);
-        if (d < 10) low.push(`${STATES[i]}/${STATES[j]} ${d.toFixed(1)}`);
+  it('the lightness the wash adds over #202020 stays inside the limits, in every phase and on every midpoint; fog is at least 8 and the lightest', () => {
+    for (const state of [...STATES, ...MIDPOINTS]) {
+      const g = groupOf(state);
+      expect(addedL(state), state).toBeLessThanOrEqual(MOST[g]);
+      if (g === 'fog') {
+        expect(addedL(state), state).toBeGreaterThanOrEqual(8);
+      } else {
+        expect(addedL(state), state).toBeLessThan(addedL(state.replace(g, 'fog')));
       }
     }
-    expect(low).toEqual([]);
   });
 
-  it('the boxes are the same in every state: no state rule sets a box, blur or text token', () => {
-    for (const s of STATES) expect(Object.keys(tokensOf(css, `${GLASS} body[data-sky='${s}']`)).sort(), s).toEqual(['--sky-alpha', '--sky-glow', '--sky-tint']);
+  it('the table: what each of the nine groups adds at noon and at its highest, over #202020 and mid-grey', () => {
+    const rows = SKIES.map((sky) => {
+      const all = PHASES.map((p) => addedL(`${sky}-${p}`));
+      const grey = PHASES.map((p) => addedL(`${sky}-${p}`, GREY));
+      return `${sky.padEnd(11)} over #202020 ${Math.min(...all).toFixed(1)} to ${Math.max(...all).toFixed(1)}, over grey ${Math.min(...grey).toFixed(1)} to ${Math.max(...grey).toFixed(1)}`;
+    });
+    console.log(`glass: delta L* of the wash\n${rows.join('\n')}`);
+    expect(rows).toHaveLength(9);
+  });
+
+  it('noon is the brightest of a group (within 0.1 L*), night the deepest; sunset and dusk are warmer or bluer, never whiter than noon', () => {
+    for (const sky of SKIES) {
+      for (const p of PHASES) {
+        if (p !== 'noon') expect(addedL(`${sky}-${p}`), `${sky} ${p}`).toBeLessThanOrEqual(addedL(`${sky}-noon`) + 0.1);
+        if (p !== 'night') expect(addedL(`${sky}-night`), `${sky} ${p}`).toBeLessThan(addedL(`${sky}-${p}`));
+      }
+      const [, a0, b0] = lab(over(`${sky}-noon`, DARK));
+      const [, a1, b1] = lab(over(`${sky}-afternoon`, DARK));
+      const [, a2] = lab(over(`${sky}-sunset`, DARK));
+      const [, , b3] = lab(over(`${sky}-dusk`, DARK));
+      expect(b1, `${sky}: afternoon warmer`).toBeGreaterThan(b0);
+      expect(a1, `${sky}: afternoon warmer`).toBeGreaterThan(a0);
+      expect(a2, `${sky}: sunset pinker than afternoon`).toBeGreaterThan(a1);
+      expect(b3, `${sky}: dusk bluer than noon`).toBeLessThan(b0);
+    }
+  });
+
+  it('clear and mainly clear keep a faint hue through a dark or saturated tint, never a near-white one', () => {
+    const c = (s: string) => model.states[s]!.tint;
+    const saturation = (t: { r: number; g: number; b: number }) => (Math.max(t.r, t.g, t.b) - Math.min(t.r, t.g, t.b)) / Math.max(t.r, t.g, t.b);
+    for (const sky of ['clear', 'partly']) {
+      for (const p of PHASES) {
+        const t = c(`${sky}-${p}`);
+        expect(Math.min(t.r, t.g, t.b), `${sky}-${p}`).toBeLessThan(100); // near-white has all three channels high
+        expect(saturation(t), `${sky}-${p}`).toBeGreaterThan(0.35);
+      }
+    }
+    for (const p of ['noon', 'afternoon', 'sunset']) expect(c(`clear-${p}`).r, p).toBeGreaterThan(c(`clear-${p}`).b + 50); // warm
+    for (const p of ['morning', 'noon', 'afternoon']) expect(c(`partly-${p}`).b, p).toBeGreaterThan(c(`partly-${p}`).r + 20); // sky
+    expect(c('clear-night').b).toBeGreaterThan(c('clear-night').r); // violet at night
+  });
+
+  it('every two groups in a phase are at least dE 5 apart and every two phases of a group at least 3, over #202020; the smallest pairs (and grey) are printed', () => {
+    const groups: [string, number, number][] = [];
+    const phases: [string, number, number][] = [];
+    const pair = (x: string, y: string, list: [string, number, number][]) =>
+      list.push([`${x} / ${y}`, deltaE(over(x, DARK), over(y, DARK)), deltaE(over(x, GREY), over(y, GREY))]);
+    for (const p of PHASES) SKIES.forEach((a, i) => SKIES.slice(i + 1).forEach((b) => pair(`${a}-${p}`, `${b}-${p}`, groups)));
+    for (const s of SKIES) PHASES.forEach((a, i) => PHASES.slice(i + 1).forEach((b) => pair(`${s}-${a}`, `${s}-${b}`, phases)));
+    expect(groups).toHaveLength(36 * 6);
+    expect(phases).toHaveLength(15 * 9);
+    const low = (list: [string, number, number][], k: 1 | 2) => [...list].sort((x, y) => x[k] - y[k])[0]!;
+    console.log(
+      `glass: closest groups ${low(groups, 1)[0]} dE ${low(groups, 1)[1].toFixed(2)}, closest phases ${low(phases, 1)[0]} dE ${low(phases, 1)[1].toFixed(2)} (over #202020); ` +
+        `over grey ${low(groups, 2)[0]} ${low(groups, 2)[2].toFixed(2)}, ${low(phases, 2)[0]} ${low(phases, 2)[2].toFixed(2)}`,
+    );
+    expect(low(groups, 1)[1]).toBeGreaterThanOrEqual(5);
+    expect(low(phases, 1)[1]).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -160,9 +187,7 @@ describe('glass contrast: everything on a box meets CLEAR_RULE', () => {
     expect(selectors.length).toBeGreaterThan(10);
     for (const sel of selectors) for (const part of sel.split(',')) expect(part.trim()).toMatch(/^html\[data-material='glass'\]/);
     expect(css.slice(0, start)).not.toContain('data-material');
-    // Before it, data-sky appears only in the classic per-weather rules (1.7), one rule per state.
-    const before = css.slice(0, start).replace(/\/\*[\s\S]*?\*\//g, '');
-    expect([...before.matchAll(/data-sky/g)].length).toBe([...before.matchAll(/^body\[data-sky='[\w-]+'\] \{ --sky-1: #[0-9a-f]{6}; --sky-2: #[0-9a-f]{6}; --glow: rgba\([^)]+\); \}$/gm)].length);
+    expect(css.slice(0, start)).not.toContain('data-sky');
   });
 
   it('no backing panels: the title bar, sidebar sections and footer have no glass background; bare-glass text has a shadow', () => {
@@ -192,20 +217,18 @@ describe('glass contrast: everything on a box meets CLEAR_RULE', () => {
 });
 
 describe('the classic look changes only where 1.7 meant it to', () => {
-  it('every CSS rule outside the glass block is the 1.6.0 text (tests/fixtures/styles-1.6.0-classic.css, taken from git), except the per-weather backgrounds and the contrast fix', () => {
+  it('every CSS rule outside the glass block is the 1.6.0 text (tests/fixtures/styles-1.6.0-classic.css, taken from git), except the old theme block and the contrast fix', () => {
     const fixture = readFileSync(path.join(__dirname, 'fixtures', 'styles-1.6.0-classic.css'), 'utf8').replace(/\r\n/g, '\n');
     const now = css.replace(/\r\n/g, '\n');
     const classic = now.slice(0, now.indexOf('/* ---------- glass (v1.6)'));
-    // 1. The eight data-theme backgrounds are replaced by the 18 data-sky ones: one comment, then one rule per state, nothing else.
+    // 1. The eight data-theme backgrounds are gone (1.7.1: the background comes from skyLook): one comment, nothing else.
     //    The block is everything between the end of :root and the first other rule.
     const themes = (t: string) => {
       const from = t.indexOf('}\n\n', t.indexOf(':root {')) + 3;
       return t.slice(from, t.indexOf('* { box-sizing'));
     };
     const newThemes = themes(classic);
-    expect(newThemes).toMatch(
-      /^\/\* The classic look per weather state \(v1\.7\)[^]*?\*\/\n(body\[data-sky='[\w-]+'\] \{ --sky-1: #[0-9a-f]{6}; --sky-2: #[0-9a-f]{6}; --glow: rgba\([^)]+\); \}\n){18}\n$/,
-    );
+    expect(newThemes).toMatch(/^\/\* The classic look follows the weather and the time of day \(v1\.7\.1\)[^\n]*\*\/\n\n$/);
     expect(themes(fixture)).toMatch(/^(body\[data-theme[^\n]+\n){8}\n$/);
     let expected = fixture.replace(themes(fixture), newThemes);
     // 2. The contrast fix: muted text 0.62 -> 0.78, and text links get their own lighter token.
@@ -277,7 +300,7 @@ describe('the contrast maths', () => {
   });
 
   it('white and black really are the extremes: no other backdrop, a busy image included, is worse', () => {
-    const layers = [...model.outer('snow-day'), ...model.places()['card']!.layers];
+    const layers = [...model.outer('snow-noon'), ...model.places()['card']!.layers];
     const muted = model.places()['card']!.items.find((i) => i.name === 'muted text')!.color;
     const named = worstContrast(muted, layers).ratio;
     let seed = 7;

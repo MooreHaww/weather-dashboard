@@ -15,8 +15,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 import { captureWindow, removeBackdrop, showBackdrop } from '../../scripts/screen';
 import { parseColor, ROW_RULE, ROW_RULE_WASHED, ruleCheck, type ItemKind, type Layer, type Rgba } from '../../src/shared/contrast';
-import { SKIES } from '../../src/shared/sky';
-import { glassModel, WASH_MAX } from '../support/glassModel';
+import { PHASES } from '../../src/shared/phase';
+import { RAIN_BLUES } from '../../src/shared/rain';
+import { lookVars, skyLook, SKIES, WASH_MAX, type Sky } from '../../src/shared/sky';
+import { glassModel } from '../support/glassModel';
 import { BACKDROP, systemBackdropType, transparencyEffectsOn } from './support/dwm';
 import { decodePng, edgeShare } from './support/pixels';
 
@@ -81,18 +83,15 @@ const STACK = `(selector) => {
   const b = getComputedStyle(document.body);
   return {
     color: getComputedStyle(el).color,
-    tint: b.getPropertyValue('--sky-tint').trim(), alpha: Number(b.getPropertyValue('--sky-alpha')), glow: b.getPropertyValue('--sky-glow').trim(),
-    strength: Number(b.getPropertyValue('--wash-strength')),
+    tint: b.getPropertyValue('--sky-tint').trim(), alpha: Number(b.getPropertyValue('--sky-alpha')),
     layers,
   };
 }`;
-type Stack = { color: string; tint: string; alpha: number; glow: string; strength: number; layers: { saturate: number | null; own: string[] }[] };
+type Stack = { color: string; tint: string; alpha: number; layers: { saturate: number | null; own: string[] }[] };
 
 function layersOf(s: Stack, withTint: boolean): Layer[] {
-  // As drawn by the .backdrop rule: the state's alphas times --wash-strength, at most WASH_MAX.
-  const glow = parseColor(s.glow);
-  const drawnGlow: Rgba = { ...glow, a: Math.min(WASH_MAX, glow.a * s.strength) };
-  const layers: Layer[] = withTint ? [{ ...parseColor(s.tint), a: Math.min(WASH_MAX, s.alpha * s.strength) } as Rgba, drawnGlow, drawnGlow] : [];
+  // As drawn by the .backdrop rule.
+  const layers: Layer[] = withTint ? [{ ...parseColor(s.tint), a: s.alpha } as Rgba] : [];
   for (const l of s.layers) {
     if (l.saturate) layers.push({ saturate: l.saturate });
     layers.push(...l.own);
@@ -112,14 +111,21 @@ async function ruleOf(page: AppPage, selector: string, kind: ItemKind, rule?: ty
   return worst;
 }
 
-const STATES = SKIES.flatMap((s) => [`${s}-day`, `${s}-night`]);
+// The app can show any of the 54; on screen the brightest and the deepest phase of each group are enough (the model covers all, with the midpoints).
+const ALL_STATES = SKIES.flatMap((s) => PHASES.map((p) => `${s}-${p}`));
+const STATES = SKIES.flatMap((s) => [`${s}-noon`, `${s}-night`]);
 const MODEL = glassModel(
   readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'styles.css'), 'utf8'),
   readFileSync(path.join(__dirname, '..', '..', 'src', 'renderer', 'charts.ts'), 'utf8'),
 );
-/** Show a state at once (no 600 ms fade), as render() would for that weather. */
-const showState = (page: AppPage, state: string) =>
-  page.evaluate(`(() => { const b = document.querySelector('.backdrop'); b.style.transition = 'none'; document.body.dataset.sky = '${state}'; void getComputedStyle(b).backgroundColor; b.style.transition = ''; })()`);
+/** Show a state at once (no 2 s fade), as paintSky would for that weather and phase. */
+const showState = (page: AppPage, state: string) => {
+  const cut = state.lastIndexOf('-');
+  const vars = lookVars(skyLook(state.slice(0, cut) as Sky, state.slice(cut + 1) as (typeof PHASES)[number]));
+  return page.evaluate(`(() => { const b = document.body; b.style.transition = 'none'; b.dataset.sky = '${state}';
+    for (const [k, v] of Object.entries(${JSON.stringify(vars)})) b.style.setProperty(k, v);
+    void getComputedStyle(document.querySelector('.backdrop')).backgroundColor; })()`);
+};
 
 /** Mean colour of a region of a capture. */
 function mean(png: Buffer, x0: number, y0: number, w: number, h: number): [number, number, number] {
@@ -192,13 +198,14 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
     expect(bg.html).toBe(TRANSPARENT);
     expect(bg.body).toBe(TRANSPARENT);
     expect(bg.rect).toEqual([0, 0, 1360, 900]);
-    expect(STATES).toContain(bg.sky); // render() set it from the shown city's weather
+    expect(ALL_STATES).toContain(bg.sky); // paintSky set it from the shown city's weather and time
     for (const state of STATES) {
       await showState(page, state);
       const got = parseColor(await page.evaluate<string>(`getComputedStyle(document.querySelector('.backdrop')).backgroundColor`));
       const want = MODEL.states[state]!;
       expect([got.r, got.g, got.b].map(Math.round), state).toEqual([want.tint.r, want.tint.g, want.tint.b]);
       expect(got.a, state).toBeCloseTo(want.alpha, 3);
+      expect(got.a, state).toBeLessThanOrEqual(WASH_MAX);
     }
     expect(app.errors).toEqual([]);
   });
@@ -301,7 +308,7 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
       ['.star', 'graphic'],
       ['.wind-arrow', 'graphic'],
     ];
-    const states = ['clear-day', 'clear-night', 'fog-day', 'rain-day', 'storm-night', 'snow-day', 'heavy-rain-night'];
+    const states = ['clear-noon', 'clear-night', 'partly-sunset', 'fog-noon', 'rain-noon', 'storm-night', 'snow-noon', 'heavy-rain-dusk'];
     for (const state of states) {
       await showState(page, state);
       for (const [sel, kind] of checks) {
@@ -327,6 +334,9 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
         ['temperature line', '#FFB547', 'graphic'],
         ['feels-like line', '#C4B5FD', 'graphic'],
         ['rain bar', '#5AB0FF', 'graphic'],
+        ['rain bar, light', RAIN_BLUES.light, 'graphic'],
+        ['rain bar, moderate', RAIN_BLUES.moderate, 'graphic'],
+        ['rain bar, heavy', RAIN_BLUES.heavy, 'graphic'],
         ['dot', '#ffb547', 'graphic'],
         ['purple', '#a78bfa', 'graphic'],
         ['axis labels', 'rgba(226, 232, 240, 0.65)', 'secondary'],
@@ -361,13 +371,13 @@ describe.runIf(GLASS_HERE)('glass on this PC (Windows 11 22H2+, "Transparency ef
       box[state] = boxAt(shot);
     }
     await removeBackdrop(app);
-    // A visible wash (--wash-strength 3), but still a shift of what is behind the window, not a cover. Measured up to
-    // 28.4 at strength 2 and 39.9 at 3 (heavy-rain-day) with this PC's HDR on, which lifts mid-greys in captures.
-    for (const [state, d] of Object.entries(wash)) expect(d, `${state} ${JSON.stringify(wash)}`).toBeLessThanOrEqual(45);
-    expect(wash['clear-day']!).toBeLessThan(wash['storm-night']!);
+    // A shift of what is behind the window, not a cover. Measured with this PC's HDR on, which lifts mid-greys in captures: 1.7.0 up to 39.9; 1.7.1 up to 57.3 (heavy-rain-noon, rain-noon 50.6):
+    // the rain tints are saturated blues at low alpha, a stronger colour cast over grey but not lighter. Limit 45 -> 60 in 1.7.1.
+    for (const [state, d] of Object.entries(wash)) expect(d, `${state} ${JSON.stringify(wash)}`).toBeLessThanOrEqual(60);
+    expect(wash['clear-noon']!).toBeLessThan(wash['fog-noon']!);
+    expect(wash['clear-noon']!).toBeLessThan(wash['storm-night']!);
     // The boxes have the same fill in every weather, but they are see-through: about a third of what is behind them shows,
-    // the wash included (and their backdrop blur draws it once more). Measured 10.9 L at --wash-strength 1, 18.6 L at 2, 19.2 L at 3
-    // (fog-day vs heavy-rain-night; HDR on). Their computed styles are identical in every state (the boxes test above).
+    // the wash included (and their backdrop blur draws it once more). 1.7.0 measured 19.2 L (HDR on). Their computed styles are identical in every state (the boxes test above).
     const L = Object.values(box).map((c) => lab(c)[0]);
     expect(Math.max(...L) - Math.min(...L), JSON.stringify(box)).toBeLessThanOrEqual(22);
     expect(app.errors).toEqual([]);

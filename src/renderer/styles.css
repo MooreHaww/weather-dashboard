@@ -28,27 +28,7 @@
   color-scheme: dark;
 }
 
-/* The classic look per weather state (v1.7): body[data-sky] = skyState(code, isDay) (src/shared/sky.ts), the same 18 states as
-   the glass wash, in the same colour family. Each sets only the opaque page gradient (.backdrop) and its glow. Computed in
-   tests/classicLook.test.ts: text 4.5:1 and graphics 3:1 on every state, and every two states at least CIE76 dE 5 apart. */
-body[data-sky='clear-day'] { --sky-1: #281b04; --sky-2: #110b02; --glow: rgba(255, 214, 140, 0.06); }
-body[data-sky='partly-day'] { --sky-1: #182431; --sky-2: #0a0f15; --glow: rgba(188, 205, 222, 0.07); }
-body[data-sky='overcast-day'] { --sky-1: #1a1b1d; --sky-2: #0b0b0c; --glow: rgba(96, 102, 111, 0.12); }
-body[data-sky='fog-day'] { --sky-1: #242424; --sky-2: #0f0f0f; --glow: rgba(219, 219, 219, 0.06); }
-body[data-sky='drizzle-day'] { --sky-1: #12243c; --sky-2: #080f19; --glow: rgba(97, 146, 208, 0.1); }
-body[data-sky='rain-day'] { --sky-1: #09172c; --sky-2: #040a13; --glow: rgba(38, 94, 183, 0.13); }
-body[data-sky='heavy-rain-day'] { --sky-1: #07173f; --sky-2: #030a1b; --glow: rgba(15, 52, 141, 0.15); }
-body[data-sky='storm-day'] { --sky-1: #252548; --sky-2: #10101e; --glow: rgba(32, 32, 62, 0.16); }
-body[data-sky='snow-day'] { --sky-1: #061d32; --sky-2: #020c15; --glow: rgba(232, 244, 255, 0.05); }
-body[data-sky='clear-night'] { --sky-1: #0b0713; --sky-2: #040308; --glow: rgba(76, 52, 135, 0.11); }
-body[data-sky='partly-night'] { --sky-1: #10141b; --sky-2: #07080b; --glow: rgba(41, 51, 69, 0.12); }
-body[data-sky='overcast-night'] { --sky-1: #090a0b; --sky-2: #040404; --glow: rgba(37, 39, 42, 0.12); }
-body[data-sky='fog-night'] { --sky-1: #0f0f0e; --sky-2: #060606; --glow: rgba(144, 143, 140, 0.08); }
-body[data-sky='drizzle-night'] { --sky-1: #040b14; --sky-2: #020408; --glow: rgba(20, 59, 109, 0.12); }
-body[data-sky='rain-night'] { --sky-1: #040f23; --sky-2: #02060f; --glow: rgba(5, 37, 97, 0.12); }
-body[data-sky='heavy-rain-night'] { --sky-1: #050f31; --sky-2: #020615; --glow: rgba(0, 12, 55, 0.13); }
-body[data-sky='storm-night'] { --sky-1: #1c1a41; --sky-2: #0c0b1b; --glow: rgba(14, 13, 32, 0.13); }
-body[data-sky='snow-night'] { --sky-1: #101a22; --sky-2: #070b0e; --glow: rgba(120, 160, 190, 0.07); }
+/* The classic look follows the weather and the time of day (v1.7.1): --sky-1, --sky-2 and --glow are set on body from skyLook (src/shared/sky.ts). */
 
 * { box-sizing: border-box; }
 
@@ -790,7 +770,7 @@ a:hover { text-decoration: underline; }
    and never under forced colours or reduced transparency: then everything above (the 1.5.1 look) applies unchanged.
    The clear look:
    1. The outer glass is nearly clear: what is behind the window (blurred by Windows' acrylic) shows through a wash that follows the shown city's weather (body[data-sky],
-      src/shared/sky.ts), scaled by --wash-strength. Text on it (app name, sidebar titles, empty lines, the footer) gets a soft text shadow.
+      src/shared/sky.ts). Text on it (app name, sidebar titles, empty lines, the footer) gets a soft text shadow.
    2. The boxes (cards, sidebar cards, the search field, overlays, the Settings sheet) are translucent dark glass:
       one smoke fill, the same in every weather, a thin light edge and an inner glow (no gradient fill: see 1.6.1 below). The desktop
       shows through them, softened.
@@ -809,43 +789,16 @@ a:hover { text-decoration: underline; }
     --link: #bcd8fe;
     --wet: #c2e1ff; /* "likely" rain text and a wet day's chance */
     --today: #dbe8ff; /* today's name in the forecast */
-    /* How strong the weather wash is: every state's alpha (and glow) is multiplied by this, capped at 0.35. */
-    --wash-strength: 3;
     --settings-blur: blur(40px) saturate(180%); /* the dashboard behind an open Settings panel */
     --settings-scrim: rgba(13, 17, 27, 0.55); /* the Settings panel's own dark layer over that blur */
-    /* Before the first weather arrives: overcast. */
-    --sky-tint: rgb(96, 102, 111); --sky-alpha: 0.075; --sky-glow: rgba(200, 206, 214, 0.03);
+    /* Before the first weather arrives: overcast at noon. Then skyLook (src/shared/sky.ts) sets both on body; WASH_STRENGTH there makes the whole look stronger or weaker. */
+    --sky-tint: rgb(111, 118, 132); --sky-alpha: 0.14;
   }
-  /* The outer glass per weather (code and is_day, src/shared/sky.ts): a faint wash of the tint, and a fainter glow. */
-  html[data-material='glass'] body[data-sky='clear-day'] { --sky-tint: rgb(255, 214, 140); --sky-alpha: 0.04; --sky-glow: rgba(255, 196, 90, 0.01); }
-  html[data-material='glass'] body[data-sky='partly-day'] { --sky-tint: rgb(188, 205, 222); --sky-alpha: 0.06; --sky-glow: rgba(170, 210, 255, 0.003); }
-  html[data-material='glass'] body[data-sky='overcast-day'] { --sky-tint: rgb(96, 102, 111); --sky-alpha: 0.075; --sky-glow: rgba(200, 206, 214, 0.03); }
-  html[data-material='glass'] body[data-sky='fog-day'] { --sky-tint: rgb(219, 219, 219); --sky-alpha: 0.055; --sky-glow: rgba(0, 0, 0, 0); }
-  html[data-material='glass'] body[data-sky='drizzle-day'] { --sky-tint: rgb(97, 146, 208); --sky-alpha: 0.07; --sky-glow: rgba(120, 170, 235, 0.05); }
-  html[data-material='glass'] body[data-sky='rain-day'] { --sky-tint: rgb(38, 94, 183); --sky-alpha: 0.09; --sky-glow: rgba(80, 150, 255, 0.06); }
-  html[data-material='glass'] body[data-sky='heavy-rain-day'] { --sky-tint: rgb(15, 52, 141); --sky-alpha: 0.12; --sky-glow: rgba(60, 110, 230, 0.06); }
-  html[data-material='glass'] body[data-sky='storm-day'] { --sky-tint: rgb(32, 32, 62); --sky-alpha: 0.14; --sky-glow: rgba(150, 130, 230, 0.05); }
-  html[data-material='glass'] body[data-sky='snow-day'] { --sky-tint: rgb(232, 244, 255); --sky-alpha: 0.043; --sky-glow: rgba(235, 246, 255, 0); }
-  html[data-material='glass'] body[data-sky='clear-night'] { --sky-tint: rgb(76, 52, 135); --sky-alpha: 0.07; --sky-glow: rgba(150, 130, 240, 0.06); }
-  html[data-material='glass'] body[data-sky='partly-night'] { --sky-tint: rgb(41, 51, 69); --sky-alpha: 0.08; --sky-glow: rgba(120, 150, 200, 0.04); }
-  html[data-material='glass'] body[data-sky='overcast-night'] { --sky-tint: rgb(37, 39, 42); --sky-alpha: 0.11; --sky-glow: rgba(150, 156, 166, 0.03); }
-  html[data-material='glass'] body[data-sky='fog-night'] { --sky-tint: rgb(144, 143, 140); --sky-alpha: 0.14; --sky-glow: rgba(0, 0, 0, 0); }
-  html[data-material='glass'] body[data-sky='drizzle-night'] { --sky-tint: rgb(20, 59, 109); --sky-alpha: 0.09; --sky-glow: rgba(90, 130, 200, 0.04); }
-  html[data-material='glass'] body[data-sky='rain-night'] { --sky-tint: rgb(5, 37, 97); --sky-alpha: 0.11; --sky-glow: rgba(60, 110, 220, 0.05); }
-  html[data-material='glass'] body[data-sky='heavy-rain-night'] { --sky-tint: rgb(0, 12, 55); --sky-alpha: 0.16; --sky-glow: rgba(40, 80, 200, 0.05); }
-  html[data-material='glass'] body[data-sky='storm-night'] { --sky-tint: rgb(14, 13, 32); --sky-alpha: 0.16; --sky-glow: rgba(120, 100, 210, 0.04); }
-  html[data-material='glass'] body[data-sky='snow-night'] { --sky-tint: rgb(120, 160, 190); --sky-alpha: 0.1; --sky-glow: rgba(190, 215, 250, 0.012); }
 
   /* 1. The window area is the glass; the page only washes it with the weather. */
   html[data-material='glass'],
   html[data-material='glass'] body { background: transparent; }
-  html[data-material='glass'] .backdrop {
-    --wash-glow: rgb(from var(--sky-glow) r g b / min(0.35, alpha * var(--wash-strength)));
-    background:
-      radial-gradient(900px 520px at 82% -10%, var(--wash-glow), transparent 70%),
-      radial-gradient(700px 500px at 0% 100%, var(--wash-glow), transparent 70%),
-      rgb(from var(--sky-tint) r g b / min(0.35, var(--sky-alpha) * var(--wash-strength)));
-  }
+  html[data-material='glass'] .backdrop { background: rgb(from var(--sky-tint) r g b / var(--sky-alpha)); }
   /* Text on the bare glass: a soft shadow instead of a panel. */
   html[data-material='glass'] .brand,
   html[data-material='glass'] .sidebar .section-title,
@@ -928,3 +881,24 @@ html:not([data-material='glass']) .settings-sheet {
     linear-gradient(180deg, rgba(120, 145, 195, 0.14), rgba(30, 42, 70, 0.38));
   background-color: rgba(13, 17, 27, 0.7);
 }
+
+/* ---------- Sky (v1.7.1) ----------
+   Both looks' backgrounds come from skyLook (src/shared/sky.ts), set on body. Registered, so a change of weather, city or time of day fades over 2 s
+   (none under reduced motion). The .backdrop's own 600 ms fade would run behind it, so it is off. */
+@property --sky-1 { syntax: '<color>'; inherits: true; initial-value: #1b2b4a; }
+@property --sky-2 { syntax: '<color>'; inherits: true; initial-value: #0e1729; }
+@property --glow { syntax: '<color>'; inherits: true; initial-value: rgba(96, 165, 250, 0.18); }
+@property --sky-tint { syntax: '<color>'; inherits: true; initial-value: rgb(111, 118, 132); }
+@property --sky-alpha { syntax: '<number>'; inherits: true; initial-value: 0.14; }
+.backdrop { transition: none; }
+body { transition: --sky-1 2s ease, --sky-2 2s ease, --glow 2s ease, --sky-tint 2s ease, --sky-alpha 2s ease; }
+@media (prefers-reduced-motion: reduce) {
+  body { transition: none; }
+}
+
+/* ---------- Rain box (v1.7.1) ----------
+   Three blues for the hour's amount (RAIN_BLUES in src/shared/rain.ts), and the legend's swatches. */
+.swatch-rain { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.swatch-light { background: #cde6ff; }
+.swatch-moderate { background: #7ebcfb; }
+.swatch-heavy { background: #3d8bf2; }

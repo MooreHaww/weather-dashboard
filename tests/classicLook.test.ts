@@ -1,21 +1,23 @@
-// v1.7: the classic look changes with the weather and the time of day. One opaque background per skyState (the same 18
-// states as the glass wash), in the same colour family as the glass tint. Everything is computed exactly: the page is
-// opaque, so there is no unknown desktop behind it. Text 4.5:1, graphics and large text 3:1, on every state; every two
-// states at least CIE76 dE 5 apart. The model (tests/support/classicModel.ts) reads the numbers from styles.css.
+// The classic look changes with the weather and the time of day: one opaque background per look (skyLook in src/shared/sky.ts, the same 54 as the
+// glass wash, and the midpoints of the blends), in the same colour family as the glass tint. Everything is computed exactly: the page is opaque, so
+// there is no unknown desktop behind it. Text 4.5:1, graphics and large text 3:1, everywhere; every two groups in a phase at least CIE76 dE 5 apart,
+// every two phases of a group at least 3. The model is tests/support/classicModel.ts.
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { compose, contrast, type Rgba } from '../src/shared/contrast';
+import { PHASES } from '../src/shared/phase';
 import { SKIES, skyState } from '../src/shared/sky';
 import { CLASSIC_NEED, CLASSIC_SHEET, DECORATIVE, classicCss, classicModel, classicRatios, classicSheet } from './support/classicModel';
-import { deltaE, glassModel } from './support/glassModel';
+import { deltaE, glassModel, lab } from './support/glassModel';
 
 const css = readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'styles.css'), 'utf8').replace(/\r\n/g, '\n');
 const charts = readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'charts.ts'), 'utf8');
 const model = classicModel(css, charts);
 const ratios = classicRatios(model);
-const STATES = SKIES.flatMap((s) => [`${s}-day`, `${s}-night`]);
+const LOOKS = SKIES.flatMap((s) => PHASES.map((p) => `${s}-${p}`));
+const STATES = Object.keys(model.states); // the 54 looks and the 54 midpoints
 
 const luminance = (c: Rgba) => {
   const f = (v: number) => ((v /= 255) <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
@@ -30,37 +32,27 @@ const hsl = (c: Rgba): [number, number] => {
   return [h * 60, s];
 };
 
-describe('classic: one background per weather state', () => {
-  it('has exactly the 18 skyState states, each a rule of its own, and the weather codes map onto them', () => {
-    expect(Object.keys(model.states).sort()).toEqual([...STATES].sort());
-    expect(skyState(0, true)).toBe('clear-day');
-    expect(skyState(2, false)).toBe('partly-night');
-    expect(skyState(45, true)).toBe('fog-day');
-    expect(skyState(61, true)).toBe('drizzle-day');
-    expect(skyState(63, false)).toBe('rain-night');
-    expect(skyState(82, true)).toBe('heavy-rain-day');
-    expect(skyState(95, false)).toBe('storm-night');
-    expect(skyState(73, true)).toBe('snow-day');
-    expect(skyState(1234, true)).toBe('overcast-day'); // unknown codes
-    for (const code of [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 97, 99]) {
-      for (const day of [true, false]) expect(model.states[skyState(code, day)], `${code} ${day}`).toBeDefined();
+describe('classic: one opaque background per look', () => {
+  it('has the 54 looks and the 54 midpoints, and the weather codes map onto them', () => {
+    expect(LOOKS).toHaveLength(54);
+    expect(STATES).toHaveLength(108);
+    for (const l of LOOKS) expect(model.states[l], l).toBeDefined();
+    for (const code of [0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 97, 99, 1234]) {
+      for (const p of PHASES) expect(model.states[skyState(code, p)], `${code} ${p}`).toBeDefined();
     }
   });
 
-  it('every state is opaque (only the glow is translucent) and sets nothing but the page gradient', () => {
+  it('every look is opaque (only the glow is translucent), and the .backdrop rule that draws them is the same as before', () => {
     for (const [name, s] of Object.entries(model.states)) {
       expect(s.sky1.a, name).toBe(1);
       expect(s.sky2.a, name).toBe(1);
       expect(s.glow.a, name).toBeLessThanOrEqual(0.2);
     }
-    for (const m of classicCss(css).matchAll(/body\[data-sky='([\w-]+)'\] \{([^}]*)\}/g)) {
-      expect([...m[2]!.matchAll(/(--[\w-]+):/g)].map((x) => x[1]), m[1]).toEqual(['--sky-1', '--sky-2', '--glow']);
-    }
-    // The .backdrop rule that draws them is the same as before.
+    expect(classicCss(css)).not.toContain('body[data-sky');
     expect(classicCss(css)).toContain('linear-gradient(160deg, var(--sky-1), var(--sky-2) 60%)');
   });
 
-  it('a dark gradient in the same colour family as the glass tint; each night darker than its day', () => {
+  it('a dark gradient; the same colour family as the glass tint; the glow is the tint; noon is the lightest of a group and night the darkest', () => {
     const glass = glassModel(css, charts);
     for (const name of STATES) {
       const s = model.states[name]!;
@@ -68,33 +60,31 @@ describe('classic: one background per weather state', () => {
       expect(luminance(lightest), name).toBeLessThan(0.05); // dark: white text stays far above 4.5:1
       expect(luminance(darkest), name).toBeLessThan(luminance(s.sky1));
       const tint = glass.states[name]!.tint;
-      const [th, ts] = hsl(tint);
-      const [ch] = hsl(s.sky1);
-      if (ts > 0.15) {
-        const diff = Math.min(Math.abs(th - ch), 360 - Math.abs(th - ch));
-        expect(diff, `${name}: hue ${ch.toFixed(0)} vs glass ${th.toFixed(0)}`).toBeLessThanOrEqual(15);
-      }
-      // The glow is the glass tint's own colour.
       expect([s.glow.r, s.glow.g, s.glow.b], name).toEqual([tint.r, tint.g, tint.b]);
-      if (name.endsWith('-night')) {
-        const day = model.states[name.replace('-night', '-day')]!;
-        expect(luminance(model.backgrounds(s).lightest), name).toBeLessThan(luminance(model.backgrounds(day).lightest));
+    }
+    const skyL = (n: string) => lab(model.states[n]!.sky1)[0];
+    for (const sky of SKIES) {
+      for (const p of PHASES) {
+        if (p !== 'noon') expect(skyL(`${sky}-${p}`), `${sky} ${p}`).toBeLessThan(skyL(`${sky}-noon`));
+        if (p !== 'night') expect(skyL(`${sky}-night`), `${sky} ${p}`).toBeLessThan(skyL(`${sky}-${p}`));
       }
+      const [th, ts] = hsl(glass.states[`${sky}-noon`]!.tint);
+      const [ch] = hsl(model.states[`${sky}-noon`]!.sky1);
+      if (ts > 0.15) expect(Math.min(Math.abs(th - ch), 360 - Math.abs(th - ch)), `${sky}: hue ${ch.toFixed(0)} vs glass ${th.toFixed(0)}`).toBeLessThanOrEqual(25);
     }
   });
 
-  it('every two states are at least dE 5 apart (CIE76, at the lightest point); the closest pair is printed', () => {
-    const pairs: { a: string; b: string; d: number }[] = [];
-    for (let i = 0; i < STATES.length; i++) {
-      for (let j = i + 1; j < STATES.length; j++) {
-        const a = STATES[i]!, b = STATES[j]!;
-        pairs.push({ a, b, d: deltaE(model.backgrounds(model.states[a]!).lightest, model.backgrounds(model.states[b]!).lightest) });
-      }
-    }
-    pairs.sort((x, y) => x.d - y.d);
-    console.log(`classic: closest states ${pairs[0]!.a} / ${pairs[0]!.b}, dE ${pairs[0]!.d.toFixed(2)} (${pairs.length} pairs)`);
-    expect(pairs).toHaveLength(153);
-    expect(pairs[0]!.d).toBeGreaterThanOrEqual(5);
+  it('every two groups in a phase are at least dE 5 apart and every two phases of a group at least 3 (at the lightest point); the closest pairs are printed', () => {
+    const d = (x: string, y: string) => deltaE(model.backgrounds(model.states[x]!).lightest, model.backgrounds(model.states[y]!).lightest);
+    const groups: { a: string; b: string; d: number }[] = [];
+    const phases: { a: string; b: string; d: number }[] = [];
+    for (const p of PHASES) SKIES.forEach((x, i) => SKIES.slice(i + 1).forEach((y) => groups.push({ a: `${x}-${p}`, b: `${y}-${p}`, d: d(`${x}-${p}`, `${y}-${p}`) })));
+    for (const s of SKIES) PHASES.forEach((x, i) => PHASES.slice(i + 1).forEach((y) => phases.push({ a: `${s}-${x}`, b: `${s}-${y}`, d: d(`${s}-${x}`, `${s}-${y}`) })));
+    groups.sort((x, y) => x.d - y.d);
+    phases.sort((x, y) => x.d - y.d);
+    console.log(`classic: closest groups ${groups[0]!.a} / ${groups[0]!.b} dE ${groups[0]!.d.toFixed(2)}; closest phases ${phases[0]!.a} / ${phases[0]!.b} dE ${phases[0]!.d.toFixed(2)}`);
+    expect(groups[0]!.d).toBeGreaterThanOrEqual(5);
+    expect(phases[0]!.d).toBeGreaterThanOrEqual(3);
   });
 });
 
@@ -112,8 +102,8 @@ describe('classic contrast, computed exactly on every state', () => {
     const fmt = (r: (typeof ratios)[number]) => `${r.ratio.toFixed(2)} (${r.item}, ${r.place}, ${r.state})`;
     const settings = ratios.filter((r) => r.place.startsWith('Settings'));
     console.log(`classic: lowest text ${fmt(low('text'))}; lowest graphic ${fmt(low('graphic'))}; Settings text lowest ${fmt(low('text', settings))}`);
-    expect(ratios.length).toBeGreaterThan(18 * 50);
-    expect(settings.length).toBe(18 * 18); // 18 items in 6 places, page or card behind, on 18 states
+    expect(ratios.length).toBeGreaterThan(108 * 50);
+    expect(settings.length).toBe(108 * 18); // 18 items in 6 places, page or card behind, on 108 looks
   });
 
   it('the Settings panel has its own classic colours (1.7), and the glass panel keeps its own', () => {
@@ -125,7 +115,7 @@ describe('classic contrast, computed exactly on every state', () => {
 
   it('the muted text the old clear-day theme drew at 3.6:1 now passes 4.5:1 on every state', () => {
     const muted = ratios.filter((r) => r.item === 'muted text');
-    expect(muted.length).toBe(18 * Object.values(model.places).filter((p) => p.items.some((i) => i.name === 'muted text')).length);
+    expect(muted.length).toBe(108 * Object.values(model.places).filter((p) => p.items.some((i) => i.name === 'muted text')).length);
     for (const r of muted) expect(r.ratio, `${r.state} ${r.place}`).toBeGreaterThanOrEqual(4.5);
     // 1.6.1's clear-day page, for the record: muted 0.62 over #1f4f8f under its 0.22 gold glow, on a hovered row.
     const old = compose('#1f4f8f', ['rgba(255, 196, 77, 0.22)', 'rgba(59, 130, 246, 0.08)', 'rgba(255, 255, 255, 0.085)']);

@@ -13,7 +13,7 @@ import {
   type ScriptableContext,
 } from 'chart.js';
 import type { NowMarker } from '../shared/passed';
-import type { HourPoint } from '../shared/rain';
+import { dryBarStyle, intensity, RAIN_BLUES, rainHourText, type HourPoint } from '../shared/rain';
 import { formatHour } from '../shared/time';
 import type { TimeFormat } from '../shared/types';
 
@@ -282,22 +282,69 @@ export function renderTempChart(
   });
 }
 
+/** An hour with an amount is coloured by its intensity (passed hours fainter), one known to be dry is faint (dryBarStyle), and one with no amount data keeps the chance style. */
 function barColor(p: HourPoint, highlight: string | null): string {
+  const dry = dryBarStyle(p);
+  if (dry) return dry.fill;
+  if (p.mm !== null) {
+    const blue = RAIN_BLUES[intensity(p.mm) as keyof typeof RAIN_BLUES];
+    return p.isPast ? `${blue}59` : blue; // 59 = 35 % alpha
+  }
   if (p.time === highlight) return SERIES_COLORS.rainHighlight;
   const alpha = 0.3 + (p.probability / 100) * 0.6;
   return p.isPast ? `rgba(90, 176, 255, ${alpha * 0.4})` : `rgba(90, 176, 255, ${alpha})`;
 }
 
+/** What the rain chart's tooltip and keyboard read, kept current on every draw. */
+let rainHours: HourPoint[] = [];
+let rainFormat: TimeFormat = '12h';
+const RAIN_CHART_LABEL = 'Rain by hour. Use the left and right arrow keys to read each hour.';
+
+function showRainHour(canvas: HTMLCanvasElement, index: number | null): void {
+  const chart = rainChart;
+  if (!chart) return;
+  const active = index === null ? [] : [{ datasetIndex: 0, index }];
+  chart.setActiveElements(active);
+  chart.tooltip?.setActiveElements(active, { x: 0, y: 0 });
+  chart.update('none');
+  canvas.setAttribute('aria-label', index === null ? RAIN_CHART_LABEL : rainHourText(rainHours[index]!, rainFormat));
+}
+
+/** Keyboard use of the chart: focus shows the current hour's tooltip, arrows and Home/End move it, leaving hides it. */
+function setupRainKeys(canvas: HTMLCanvasElement): void {
+  let index = 0;
+  const start = () => Math.max(0, rainHours.findIndex((h) => !h.isPast));
+  canvas.addEventListener('focus', () => {
+    index = start();
+    showRainHour(canvas, index);
+  });
+  canvas.addEventListener('blur', () => showRainHour(canvas, null));
+  canvas.addEventListener('keydown', (e) => {
+    const last = rainHours.length - 1;
+    const next = e.key === 'ArrowRight' ? Math.min(index + 1, last) : e.key === 'ArrowLeft' ? Math.max(index - 1, 0) : e.key === 'Home' ? 0 : e.key === 'End' ? last : null;
+    if (next === null) return;
+    e.preventDefault();
+    index = next;
+    showRainHour(canvas, index);
+  });
+}
+
 export function renderRainChart(canvas: HTMLCanvasElement, hours: HourPoint[], highlight: string | null, format: TimeFormat): void {
+  rainHours = hours;
+  rainFormat = format;
   const labels = hours.map((h) => formatHour(h.time, false, format));
   canvas.dataset.labels = JSON.stringify(labels);
   const data = hours.map((h) => h.probability);
   const colors = hours.map((h) => barColor(h, highlight));
+  const outlines = hours.map((h) => dryBarStyle(h)?.outline ?? 'transparent');
+  const outlineWidths = hours.map((h) => dryBarStyle(h)?.width ?? 0);
 
   if (rainChart) {
     rainChart.data.labels = labels;
     rainChart.data.datasets[0]!.data = data;
     rainChart.data.datasets[0]!.backgroundColor = colors;
+    rainChart.data.datasets[0]!.borderColor = outlines;
+    rainChart.data.datasets[0]!.borderWidth = outlineWidths;
     rainChart.update();
     return;
   }
@@ -306,14 +353,14 @@ export function renderRainChart(canvas: HTMLCanvasElement, hours: HourPoint[], h
     type: 'bar',
     data: {
       labels,
-      datasets: [{ label: 'Chance of rain', data, backgroundColor: colors, borderRadius: 4, borderSkipped: false, maxBarThickness: 18 }],
+      datasets: [{ label: 'Chance of rain', data, backgroundColor: colors, borderColor: outlines, borderWidth: outlineWidths, hoverBorderWidth: outlineWidths, borderRadius: 4, borderSkipped: false, maxBarThickness: 18 }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { ...tooltip, displayColors: false, callbacks: { label: (c) => ` ${c.parsed.y}% chance of rain` } },
+        tooltip: { ...tooltip, displayColors: false, callbacks: { title: () => '', label: (c) => rainHourText(rainHours[c.dataIndex]!, rainFormat) } },
       },
       scales: {
         x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkipPadding: 10 } },
@@ -327,4 +374,5 @@ export function renderRainChart(canvas: HTMLCanvasElement, hours: HourPoint[], h
       },
     },
   });
+  setupRainKeys(canvas);
 }

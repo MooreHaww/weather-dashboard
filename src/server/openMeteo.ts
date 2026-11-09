@@ -104,6 +104,7 @@ interface RawForecast {
     temperature_2m: number[];
     apparent_temperature: number[];
     precipitation_probability: (number | null)[];
+    precipitation?: (number | null)[];
     weather_code: number[];
     is_day: number[];
   };
@@ -127,7 +128,7 @@ export function forecastUrl(lat: number, lon: number, units: Units, wind: WindUn
     longitude: String(lon),
     current:
       'temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,is_day',
-    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,weather_code,is_day',
+    hourly: 'temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day',
     daily:
       'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset',
     timezone: 'auto',
@@ -174,6 +175,7 @@ export async function forecast(
       temperature: raw.hourly.temperature_2m,
       apparentTemperature: raw.hourly.apparent_temperature,
       precipitationProbability: raw.hourly.precipitation_probability,
+      ...(raw.hourly.precipitation ? { precipitation: raw.hourly.precipitation } : {}),
       weatherCode: raw.hourly.weather_code,
       isDay: raw.hourly.is_day.map((d) => d === 1),
     },

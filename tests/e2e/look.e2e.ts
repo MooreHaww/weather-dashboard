@@ -12,6 +12,7 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
 import { LOOK_GLASS_NEEDS } from '../../src/renderer/components/settings';
+import { parseColor } from '../../src/shared/contrast';
 import { transparencyEffectsOn } from './support/dwm';
 
 const tokyo = { id: 1850147, name: 'Tokyo', latitude: 35.6895, longitude: 139.69171, admin1: 'Tokyo', country: 'Japan', countryCode: 'JP', timezone: 'Asia/Tokyo' };
@@ -120,20 +121,29 @@ describe('Settings > Look', () => {
   });
 
   it('classic follows the weather: a sunny and a rainy city get different opaque backgrounds', async () => {
-    await page.waitFor(`document.body.dataset.sky === 'clear-day'`, 15_000);
-    await sleep(800); // the .backdrop's 600 ms fade
+    await page.waitFor(`document.body.dataset.sky.startsWith('clear-')`, 15_000);
+    await sleep(2500); // the 2 s fade
     const sunny = await backdrop(page);
     expect(await bodyBg(page)).toBe('rgb(11, 18, 32)');
     await page.evaluate(`document.querySelector('.place-card.recent[data-id="${oslo.id}"], .place-card[data-id="${oslo.id}"]').click()`);
-    await page.waitFor(`document.body.dataset.sky === 'rain-day'`, 15_000);
-    await sleep(800);
+    await page.waitFor(`document.body.dataset.sky.startsWith('rain-')`, 15_000);
+    await sleep(2500);
     const rainy = await backdrop(page);
     expect(sunny).toContain('linear-gradient(160deg');
     expect(rainy).toContain('linear-gradient(160deg');
     expect(rainy).not.toBe(sunny);
-    // The colours are the ones styles.css gives the two states.
-    expect(sunny).toContain('rgb(40, 27, 4)'); // clear-day --sky-1 #281b04
-    expect(rainy).toContain('rgb(9, 23, 44)'); // rain-day --sky-1 #09172c
+    // The colours are the look the app computed for this weather and time (the phase depends on the real clock in each city).
+    const first = (css: string) => parseColor(/rgb\([^)]+\)/.exec(css.slice(css.indexOf('linear-gradient')))![0]);
+    const sky1 = parseColor(await page.evaluate<string>(`document.body.style.getPropertyValue('--sky-1')`));
+    const drawn = first(rainy);
+    expect([drawn.r, drawn.g, drawn.b]).toEqual([sky1.r, sky1.g, sky1.b].map(Math.round));
+    expect(drawn.b).toBeGreaterThan(first(sunny).b); // rain is bluer in every phase
+    // The fade is the body's 2 s transition, and none under reduced motion.
+    const fade = () => page.evaluate<string>(`getComputedStyle(document.body).transitionProperty + ' ' + getComputedStyle(document.body).transitionDuration`);
+    expect(await fade()).toMatch(/--sky-1.* 2s/);
+    await page.emulateReducedMotion(true);
+    expect(await fade()).not.toContain('--sky-1');
+    await page.emulateReducedMotion(false);
   });
 
   it.runIf(GLASS_HERE)('choosing Glass applies at once (no reload); Settings blurs the dashboard there too; Classic again at once', async () => {
