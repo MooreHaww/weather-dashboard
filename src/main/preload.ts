@@ -42,6 +42,18 @@ ipcRenderer.on('appearance', (_event, next: unknown) => {
   for (const listener of modeListeners) listener(next);
 });
 
+// v1.9 "Close Weather Dashboard?": main asks (receive-only 'close-request'), the page answers once with 'exit' or
+// 'hide' on 'close-choice' (CLOSE_REQUEST_CHANNEL / CLOSE_CHOICE_CHANNEL in closeChoice.ts). Anything else is not sent.
+contextBridge.exposeInMainWorld('background', {
+  onCloseRequest(callback: () => void): void {
+    ipcRenderer.on('close-request', () => callback()); // nothing from main is passed on
+  },
+  /** Sends exactly 'exit' or 'hide'; any other value sends nothing. The main process checks it again. */
+  choose(choice: unknown): void {
+    if (choice === 'exit' || choice === 'hide') ipcRenderer.send('close-choice', choice);
+  },
+});
+
 contextBridge.exposeInMainWorld('appearance', {
   /** Glass or solid as the main process decided it; null outside the app (then the page stays solid). */
   current(): AppearanceMode | null {

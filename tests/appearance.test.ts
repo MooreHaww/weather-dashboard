@@ -162,9 +162,9 @@ describe('the preload (it cannot import appearance.ts)', () => {
     expect(preload).toContain(`ipcRenderer.on('${APPEARANCE_CHANNEL}'`);
   });
 
-  it('sends nothing new: only the two update messages go back', () => {
+  it('sends nothing for the look: only the two update messages and the v1.9 close choice go back', () => {
     const sends = [...preload.matchAll(/ipcRenderer\.(send|invoke|sendSync|postMessage)\(\s*'([^']+)'/g)].map((m) => m[2]);
-    expect(sends).toEqual(['update-restart', 'update-check']);
+    expect(sends).toEqual(['update-restart', 'update-check', 'close-choice']);
     expect(preload).not.toMatch(/ipcRenderer\.(invoke|sendSync|postMessage|sendTo)/);
   });
 });

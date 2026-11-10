@@ -1,9 +1,10 @@
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
-import type { Place, WeatherData } from '../shared/types';
+import type { AppState, Place, Units, WeatherData, WindUnit } from '../shared/types';
 import { TtlCache } from './cache';
 import { HttpError } from './errors';
 import { Metrics } from './metrics';
-import { UpstreamError, type FetchLike } from './openMeteo';
+import { forecast, UpstreamError, type FetchLike } from './openMeteo';
+import { backgroundRoutes, type BackgroundHooks } from './routes/background';
 import { locationRoutes } from './routes/location';
 import { stateRoutes } from './routes/state';
 import { weatherRoutes } from './routes/weather';
@@ -19,6 +20,10 @@ export interface AppOptions {
   geocodeTtlMs?: number;
   now?: () => number;
   log?: (level: 'info' | 'warn' | 'error', msg: string) => void;
+  /** v1.9: called after every saved change to the state (the main process applies settings from it). */
+  onStateChange?: (state: AppState) => void;
+  /** v1.9: start with Windows and the test notification, from the main process. */
+  background?: BackgroundHooks;
 }
 
 // The renderer only talks to this server; no remote scripts, styles or fonts.
@@ -53,7 +58,7 @@ export function createApp(opts: AppOptions) {
   const weatherCache = new TtlCache<WeatherData>(opts.weatherTtlMs ?? 10 * 60_000, 200, now);
   const geocodeCache = new TtlCache<Place[]>(opts.geocodeTtlMs ?? 24 * 60 * 60_000, 500, now);
   const metrics = new Metrics();
-  const storage = new Storage(opts.dataDir);
+  const storage = new Storage(opts.dataDir, opts.onStateChange);
   const startedAt = new Date(now()).toISOString();
 
   const app = express();
@@ -75,6 +80,7 @@ export function createApp(opts: AppOptions) {
   api.use(weatherRoutes({ fetchImpl, weatherCache, geocodeCache, metrics }));
   api.use(stateRoutes(storage));
   api.use(locationRoutes({ storage, fetchImpl, log }));
+  api.use(backgroundRoutes(opts.background));
   api.get('/stats', (_req, res) => {
     const w = weatherCache.stats();
     const g = geocodeCache.stats();
@@ -115,5 +121,16 @@ export function createApp(opts: AppOptions) {
   };
   app.use(onError);
 
-  return { app, storage, weatherCache, geocodeCache, metrics };
+  /**
+   * v1.9: the weather for the tray and rain alerts, through the same cache and the same Open-Meteo request as
+   * GET /api/weather (same key, so the page, the tray and the alerts share entries). Never forces a fresh load.
+   */
+  const weather = async (lat: number, lon: number, units: Units, wind: WindUnit): Promise<WeatherData> => {
+    const la = Math.round(lat * 100) / 100;
+    const lo = Math.round(lon * 100) / 100;
+    const { value } = await weatherCache.getOrLoad(`${la},${lo},${units},${wind}`, () => forecast(fetchImpl, la, lo, units, wind));
+    return value;
+  };
+
+  return { app, storage, weatherCache, geocodeCache, metrics, weather };
 }

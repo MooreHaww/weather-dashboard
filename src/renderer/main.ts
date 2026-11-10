@@ -6,6 +6,7 @@ import {
   type CacheStatus,
   type Place,
   type Appearance,
+  type CloseBehavior,
   type TempLabels,
   type TimeFormat,
   type Units,
@@ -15,13 +16,14 @@ import {
 import { phaseBlend, sunTimesOn } from '../shared/phase';
 import { skyNow } from '../shared/sky';
 import { describeWeather } from '../shared/weatherCodes';
-import { api, ApiError } from './api';
+import { api, ApiError, type StartupState } from './api';
 import { setupAppearance } from './appearance';
 import { moveTempNow } from './charts';
 import { nowMarker, renderDayDetails, updateNowDot } from './components/dayDetails';
 import { renderForecast, selectDay, setupForecast } from './components/forecast';
 import { renderHero, tickClock } from './components/hero';
 import { setupSearch } from './components/search';
+import { showCloseDialog } from './components/closeDialog';
 import { setupSettings, syncSettingsControls } from './components/settings';
 import { renderSidebar, setupSidebar, type CardWeather } from './components/sidebar';
 import { setupUpdateReady } from './components/updateNote';
@@ -49,7 +51,7 @@ const app = {
   state: {
     favorites: [],
     recent: [],
-    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' },
+    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false },
     lastPlace: null,
     myLocation: null,
   } as AppState,
@@ -344,6 +346,45 @@ function setAppearance(appearance: Appearance): void {
   api.saveSettings({ appearance }).catch(() => {});
 }
 
+// ---------- background (v1.9) ----------
+
+/** "Start with Windows" as the OS last said it (never stored; read again whenever Settings opens). */
+let startupState: StartupState | null = null;
+
+async function readStartup(): Promise<void> {
+  try {
+    startupState = await api.startup();
+  } catch {
+    startupState = { supported: false, enabled: false };
+  }
+  syncSettingsControls();
+}
+
+async function setStartup(on: boolean): Promise<void> {
+  try {
+    startupState = await api.setStartup(on); // what the OS says now
+  } catch {
+    await readStartup();
+    return;
+  }
+  syncSettingsControls();
+}
+
+/** The close button's choice. The main process applies it as soon as it is saved. */
+function setCloseBehavior(closeBehavior: CloseBehavior): Promise<unknown> {
+  app.state.settings.closeBehavior = closeBehavior;
+  syncSettingsControls();
+  return api.saveSettings({ closeBehavior });
+}
+
+/** Rain alerts on or off. The main process starts or stops its timer when the setting is saved. */
+function setRainAlerts(rainAlerts: boolean): void {
+  if (rainAlerts === app.state.settings.rainAlerts) return;
+  app.state.settings.rainAlerts = rainAlerts;
+  syncSettingsControls();
+  api.saveSettings({ rainAlerts }).catch(() => {});
+}
+
 /** Times are formatted from the weather we already have, so no reload is needed. */
 function setTimeFormat(timeFormat: TimeFormat): void {
   if (timeFormat === app.state.settings.timeFormat) return;
@@ -483,7 +524,17 @@ async function boot(): Promise<void> {
     glassSupported: () => look.supported(),
     locationStatus: () => locationStatus(app.state.settings.location, app.state.myLocation, app.lookup),
     now: () => localIsoIn(app.weather?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone),
+    setCloseBehavior: (v) => void setCloseBehavior(v).catch(() => {}),
+    startup: () => startupState,
+    setStartup: (on) => void setStartup(on),
+    setRainAlerts,
+    sendTestAlert: () => void api.testAlert().catch(() => {}),
+    onOpen: () => void readStartup(),
   });
+  // The main process asks before closing when "When I close the window" is Ask (v1.9).
+  window.background?.onCloseRequest(() =>
+    showCloseDialog({ remember: setCloseBehavior, choose: (c) => window.background?.choose(c) }),
+  );
   $('#refresh').addEventListener('click', () => void refresh());
   $('#location-consent-text').textContent = LOCATION_PRIVACY_LINE;
   $('#location-allow').addEventListener('click', () => void enableLocation());

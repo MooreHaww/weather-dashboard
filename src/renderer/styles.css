@@ -902,3 +902,11 @@ body { transition: --sky-1 2s ease, --sky-2 2s ease, --glow 2s ease, --sky-tint 
 .swatch-light { background: #cde6ff; }
 .swatch-moderate { background: #7ebcfb; }
 .swatch-heavy { background: #3d8bf2; }
+
+/* ---------- Background (v1.9) ----------
+   "Close Weather Dashboard?" (components/closeDialog.ts) uses the "Restart now?" box, but over the whole window
+   (the Settings panel too), so its layer is fixed and above everything. The checkbox and the small "Send a test" button. */
+.close-confirm { position: fixed; z-index: 100; background: rgba(8, 12, 24, 0.45); }
+.check { display: flex; align-items: center; gap: 8px; margin-top: 12px; cursor: pointer; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent-strong); cursor: pointer; }
+.settings-row-control > .button.button-small { padding: 4px 10px; font-size: 12px; border-radius: 8px; }

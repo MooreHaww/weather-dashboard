@@ -27,7 +27,7 @@ describe('a 1.5.0 file', () => {
   it('loads unchanged: every saved value kept, the location setting and place too', async () => {
     const before = await saved();
     delete before.version;
-    expect(await new Storage(dir).get()).toEqual({ ...before, settings: { ...(before.settings as object), appearance: 'glass' } }); // 1.7: decided once, glass
+    expect(await new Storage(dir).get()).toEqual({ ...before, settings: { ...(before.settings as object), appearance: 'glass', closeBehavior: 'ask', rainAlerts: false } }); // 1.7: decided once, glass
   });
 });
 
@@ -37,7 +37,7 @@ describe('Storage.removeRecent', () => {
     expect(names(state.recent)).toEqual(['New York', 'Berlin']);
     const before = await saved();
     // Nothing else changes, in memory or in the file (the next start's city stays, even when it was removed from the list).
-    expect(await onDisk()).toEqual({ ...before, settings: { ...(before.settings as object), appearance: 'glass' }, recent: before.recent.filter((p) => p.id !== 2643743) });
+    expect(await onDisk()).toEqual({ ...before, settings: { ...(before.settings as object), appearance: 'glass', closeBehavior: 'ask', rainAlerts: false }, recent: before.recent.filter((p) => p.id !== 2643743) });
   });
 
   it('keeps the next start city even when that city is removed from the list', async () => {

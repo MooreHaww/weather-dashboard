@@ -46,6 +46,8 @@ async function waitClosed() {
 
 /** Click an option of a settings control with a real click (the panel must be open). */
 async function chooseOption(value: string) {
+  // Since 1.9 (Background) the sections are taller than a 700 px window: bring the option into view first.
+  await page.evaluate(`document.querySelector('#settings-sections button[data-value="${value}"]').scrollIntoView({ block: 'center' })`);
   const [x, y] = await centerOf(`#settings-sections button[data-value="${value}"]`);
   await page.click(x, y);
 }
@@ -94,16 +96,17 @@ describe('settings panel', () => {
     expect(dialog).toEqual({ role: 'dialog', modal: 'true', name: 'Settings' });
     expect(await page.evaluate(`document.getElementById('settings-button').getAttribute('aria-expanded')`)).toBe('true');
     expect(await focusInPanel()).toBe(true);
-    // Exactly the real sections: no placeholders for startup, close behavior or widget.
+    // Exactly the real sections: no placeholder for the widget.
     expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Updates',
       'Look',
+      'Background',
       'Units',
       'Time format',
       'Temperature chart',
       'Location',
     ]);
-    expect(await checkedOptions()).toEqual(['metric', 'kmh', '12h', '3h']);
+    expect(await checkedOptions()).toEqual(['ask', 'metric', 'kmh', '12h', '3h']);
   });
 
   it('is a full-window liquid-glass layer that blurs the app behind it', async () => {

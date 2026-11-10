@@ -64,6 +64,8 @@ async function centerOf(selector: string): Promise<[number, number]> {
   );
 }
 async function clickOn(selector: string) {
+  // Since 1.9 (Background) the Location row can be below the visible part of Settings: bring it into view first.
+  await page.evaluate(`document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'nearest' })`);
   const [x, y] = await centerOf(selector);
   await page.click(x, y);
 }
@@ -117,7 +119,7 @@ describe('before the user answers', () => {
     expect(await geoCalls()).toEqual([]);
     expect(await placeName()).toBe('Tokyo');
     await openSettings();
-    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[aria-checked="true"]')].map((b) => b.dataset.value)`)).toEqual(['imperial', 'mph', '24h', '2h']); // Look (1.7) depends on the PC
+    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[aria-checked="true"]')].map((b) => b.dataset.value)`)).toEqual(['ask', 'imperial', 'mph', '24h', '2h']); // Look (1.7) depends on the PC; 'ask' is 1.9's close default
     await closeSettings();
   });
 
@@ -619,13 +621,14 @@ describe('the "i" button next to "Use my location" (1.5.1)', () => {
       ).toEqual([0, 0]);
     }
     // Focused, then the sections scrolled away (the button is out of sight): Enter still opens it, next to the button brought back into view.
+    // 0.5 px slack (1.9): with the taller panel, the scroll can stop with the button 0.25 px past the edge (sub-pixel rounding at the end of the content).
     await focusButton();
     await page.evaluate(`document.getElementById('settings-sections').scrollTop = 0`);
     await page.press('Enter');
     await page.waitFor(popoverOpen, 2000);
     expect(
-      await page.evaluate<boolean>(`(() => { const b = document.querySelector('#settings-location .info-button').getBoundingClientRect(), a = document.getElementById('settings-sections').getBoundingClientRect(); return b.top >= a.top && b.bottom <= a.bottom; })()`),
-    ).toBe(true);
+      await page.evaluate<string>(`(() => { const b = document.querySelector('#settings-location .info-button').getBoundingClientRect(), a = document.getElementById('settings-sections').getBoundingClientRect(); return b.top >= a.top - 0.5 && b.bottom <= a.bottom + 0.5 ? 'inside' : 'button ' + b.top + '..' + b.bottom + ' sections ' + a.top + '..' + a.bottom; })()`),
+    ).toBe('inside');
     expect(await page.evaluate<number>(`document.getElementById('settings').scrollTop`)).toBe(0);
     await page.press('Escape');
     await page.waitFor(`!(${popoverOpen})`, 2000);

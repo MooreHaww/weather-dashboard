@@ -117,7 +117,7 @@ async function launchWithFeed(mode: FeedMode, opts: { holdInstaller?: boolean } 
  * electron-updater does (next tick, app.quit()). install/doInstall do nothing, so the
  * install-on-quit handler cannot start the fake installer either.
  */
-async function stubInstaller(a: LaunchedApp, opts: { quit?: boolean } = {}) {
+async function stubInstaller(a: LaunchedApp, opts: { quit?: boolean; logInstall?: boolean } = {}) {
   const stateFile = path.join(a.dataDir, 'window-state.json');
   await a.evaluateMain(`
     const { autoUpdater } = process.mainModule.require('electron-updater');
@@ -131,7 +131,11 @@ async function stubInstaller(a: LaunchedApp, opts: { quit?: boolean } = {}) {
     for (const ev of ['before-quit', 'will-quit', 'quit']) app.on(ev, () => note(ev));
     const { BrowserWindow } = process.mainModule.require('electron');
     BrowserWindow.getAllWindows()[0].on('close', () => note('window close'));
-    autoUpdater.install = () => { globalThis.__installs.push('install'); return false; };
+    autoUpdater.install = (...args) => {
+      globalThis.__installs.push('install');
+      if (${Boolean(opts.logInstall)}) fs.appendFileSync(quitLog, 'install ' + JSON.stringify(args) + '\\n');
+      return false;
+    };
     autoUpdater.doInstall = () => { globalThis.__installs.push('doInstall'); return false; };
     autoUpdater.quitAndInstall = (...args) => {
       const file = ${JSON.stringify(stateFile)};
@@ -334,6 +338,66 @@ describe('auto-update in the packaged app', () => {
     await waitForDashboard(app.page);
     expect(await app.evaluateMain<boolean>(`return process.mainModule.require('electron').BrowserWindow.getAllWindows()[0].isMaximized();`)).toBe(true);
     expect(app.errors).toEqual([]);
+  });
+
+  // v1.9: with "When I close the window" = Keep running, the close button only hides. Restart must still quit.
+  it('Restart quits by itself also when closing the window only hides it (Keep running)', async () => {
+    feed = await startFeed('ok');
+    cacheDir = await mkdtemp(path.join(tmpdir(), 'wd-update-cache-'));
+    app = await launchApp({ settings: { closeBehavior: 'background' } }, { executable: exe, env: { LOCALAPPDATA: cacheDir } });
+    await app.evaluateMain(`
+      const { autoUpdater } = process.mainModule.require('electron-updater');
+      autoUpdater.setFeedURL({ provider: 'generic', url: ${JSON.stringify(feed.url)} });
+    `);
+    await stubInstaller(app, { quit: true });
+    const { page, errors, dataDir } = app;
+    await waitForDashboard(page);
+    await page.waitFor(noteVisible, FIRST_CHECK_DELAY_MS + 30_000);
+    await openSettings(page);
+    await clickOn(page, '#update-now');
+    await page.waitFor(confirmOpen, 2000);
+    expect(errors).toEqual([]);
+    await clickOn(page, '[data-action="restart"]');
+    expect(await app.waitForExit(15_000)).toBe(0);
+    const events = readFileSync(path.join(dataDir, 'quit-log.txt'), 'utf8').trim().split(/\r?\n/);
+    expect(events).toEqual(['quitAndInstall [true,true] state saved: true', 'before-quit', 'window close', 'will-quit', 'quit']);
+    await app.close();
+    app = undefined;
+  });
+
+  // v1.9: living in the tray, the app installs a downloaded update when it really quits: the tray's Quit (or Exit).
+  it("the tray's Quit quits with the window hidden, and the downloaded update installs on quit (autoInstallOnAppQuit)", async () => {
+    feed = await startFeed('ok');
+    cacheDir = await mkdtemp(path.join(tmpdir(), 'wd-update-cache-'));
+    app = await launchApp({ settings: { closeBehavior: 'background' } }, { executable: exe, env: { LOCALAPPDATA: cacheDir } });
+    await app.evaluateMain(`
+      const { autoUpdater } = process.mainModule.require('electron-updater');
+      autoUpdater.setFeedURL({ provider: 'generic', url: ${JSON.stringify(feed.url)} });
+    `);
+    await stubInstaller(app, { quit: true, logInstall: true });
+    const { page, errors, dataDir } = app;
+    await waitForDashboard(page);
+    await page.waitFor(noteVisible, FIRST_CHECK_DELAY_MS + 30_000);
+    // The close button hides: no quit, so nothing installs yet.
+    await app.evaluateMain(`const { BrowserWindow } = process.mainModule.require('electron'); setTimeout(() => BrowserWindow.getAllWindows()[0].close(), 20); return true;`);
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await app.evaluateMain<boolean>(`return process.mainModule.require('electron').BrowserWindow.getAllWindows()[0].isVisible();`)).toBe(false);
+    expect(await app.evaluateMain<string[]>(`return globalThis.__installs;`)).toEqual([]);
+    expect(errors).toEqual([]);
+    await app.evaluateMain(`
+      const path = process.mainModule.require('path');
+      const tray = process.mainModule.require(path.join(process.mainModule.require('electron').app.getAppPath(), 'dist', 'main', 'tray.js'));
+      const quit = tray.trayMenu().items.find((i) => i.label === 'Quit');
+      setTimeout(() => quit.click(), 20);
+      return true;
+    `);
+    expect(await app.waitForExit(15_000)).toBe(0);
+    const events = readFileSync(path.join(dataDir, 'quit-log.txt'), 'utf8').trim().split(/\r?\n/);
+    expect(events.slice(0, 4)).toEqual(['window close', 'before-quit', 'window close', 'will-quit']);
+    expect(events).toContain('quit');
+    expect(events.filter((e) => e.startsWith('install '))).toHaveLength(1); // electron-updater's install-on-quit ran once
+    await app.close();
+    app = undefined;
   });
 
   it('shows nothing when the update server fails, and the app keeps working', async () => {

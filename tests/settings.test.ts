@@ -23,9 +23,10 @@ function toggle(): HTMLInputElement {
 }
 
 describe('settings helpers', () => {
-  it('ships the Look, Units, Time format, Temperature chart and Location sections, and nothing else yet', () => {
+  it('ships the Look, Background, Units, Time format, Temperature chart and Location sections, and nothing else yet', () => {
     expect(SETTINGS_SECTIONS.map((s) => [s.id, s.title])).toEqual([
       ['look', 'Look'],
+      ['background', 'Background'],
       ['units', 'Units'],
       ['time-format', 'Time format'],
       ['temperature-chart', 'Temperature chart'],
@@ -114,7 +115,7 @@ describe('settings helpers', () => {
 });
 
 describe('the real sections', () => {
-  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' };
+  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false };
   let nowLocal = '2026-10-17T16:05:30';
   const bindings: SettingsBindings = {
     get: () => settings,
@@ -126,6 +127,11 @@ describe('the real sections', () => {
     locationStatus: () => `status:${settings.location}`,
     setAppearance: vi.fn((a) => void (settings.appearance = a)),
     glassSupported: () => true,
+    setCloseBehavior: vi.fn(),
+    startup: () => null,
+    setStartup: vi.fn(),
+    setRainAlerts: vi.fn(),
+    sendTestAlert: vi.fn(),
     now: () => nowLocal,
   };
 
@@ -136,19 +142,19 @@ describe('the real sections', () => {
   }
 
   const checked = (root: HTMLElement, group: number) =>
-    [...root.querySelectorAll('#settings-sections > :not(#settings-look) [role="radiogroup"]')[group]!.querySelectorAll('button')]
+    [...root.querySelectorAll('#settings-sections > :not(#settings-look):not(#settings-background) [role="radiogroup"]')[group]!.querySelectorAll('button')]
       .filter((b) => b.getAttribute('aria-checked') === 'true')
       .map((b) => b.textContent);
 
   it('renders radio groups with the current values checked', () => {
     const root = mount();
-    expect([...root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Look', 'Units', 'Time format', 'Temperature chart', 'Location']);
-    expect(root.querySelectorAll('[role="radiogroup"]')).toHaveLength(5); // Look's is first; the indexes below skip it
+    expect([...root.querySelectorAll('h3')].map((h) => h.textContent)).toEqual(['Look', 'Background', 'Units', 'Time format', 'Temperature chart', 'Location']);
+    expect(root.querySelectorAll('[role="radiogroup"]')).toHaveLength(6); // Look's and Background's come first; the indexes below skip them
     expect(checked(root, 0)).toEqual(['°C']);
     expect(checked(root, 1)).toEqual(['km/h']);
     expect(checked(root, 2)).toEqual(['12-hour (4:05 PM)']);
     expect(checked(root, 3)).toEqual(['Every 3 hours']);
-    expect([...root.querySelectorAll('#settings-sections > :not(#settings-look) [role="radiogroup"]')[1]!.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+    expect([...root.querySelectorAll('#settings-sections > :not(#settings-look):not(#settings-background) [role="radiogroup"]')[1]!.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
       'km/h',
       'mph',
       'm/s',
@@ -157,7 +163,7 @@ describe('the real sections', () => {
 
   it('labels the time formats with examples from the current time, and tells screen readers where they apply', () => {
     const root = mount();
-    const labels = () => [...root.querySelectorAll('#settings-sections > :not(#settings-look) [role="radiogroup"]')[2]!.querySelectorAll('button')].map((b) => b.textContent);
+    const labels = () => [...root.querySelectorAll('#settings-sections > :not(#settings-look):not(#settings-background) [role="radiogroup"]')[2]!.querySelectorAll('button')].map((b) => b.textContent);
     expect(labels()).toEqual(['12-hour (4:05 PM)', '24-hour (16:05)']);
     const section = root.querySelector('#settings-time-format')!;
     expect(section.querySelector('.settings-section-description')).toBeNull(); // not shown (1.5.1)
@@ -172,7 +178,7 @@ describe('the real sections', () => {
 
   it('offers every 3 hours, every 2 hours and every hour, and calls the setter', () => {
     const root = mount();
-    const group = root.querySelectorAll('#settings-sections > :not(#settings-look) [role="radiogroup"]')[3]!;
+    const group = root.querySelectorAll('#settings-sections > :not(#settings-look):not(#settings-background) [role="radiogroup"]')[3]!;
     expect([...group.querySelectorAll('button')].map((b) => [b.dataset.value, b.textContent])).toEqual([
       ['3h', 'Every 3 hours'],
       ['2h', 'Every 2 hours'],
@@ -224,7 +230,7 @@ describe('the real sections', () => {
   it('calls the matching setter on click and follows outside changes', () => {
     const root = mount();
     const button = (group: number, text: string) =>
-      [...root.querySelectorAll('#settings-sections > :not(#settings-look) [role="radiogroup"]')[group]!.querySelectorAll('button')].find((b) => b.textContent === text)!;
+      [...root.querySelectorAll('#settings-sections > :not(#settings-look):not(#settings-background) [role="radiogroup"]')[group]!.querySelectorAll('button')].find((b) => b.textContent === text)!;
 
     button(1, 'm/s').click();
     button(2, '24-hour (16:05)').click();

@@ -147,9 +147,9 @@ describe('the "Check for updates" message in the main process', () => {
     await vi.waitFor(() => expect(s.log).toHaveBeenCalledWith('warn', expect.stringContaining('boom')));
   });
 
-  it('the preload sends exactly the two messages, each with no arguments', () => {
+  it('the preload sends exactly the two update messages with no arguments, plus the v1.9 close choice', () => {
     const preload = readFileSync(path.join(__dirname, '..', 'src', 'main', 'preload.ts'), 'utf8');
     const sends = [...preload.matchAll(/ipcRenderer\.(send|sendSync|invoke|postMessage)\(([^)]*)\)/g)].map((m) => m[0]);
-    expect(sends).toEqual([`ipcRenderer.send('update-restart')`, `ipcRenderer.send('${CHECK_CHANNEL}')`]);
+    expect(sends).toEqual([`ipcRenderer.send('update-restart')`, `ipcRenderer.send('${CHECK_CHANNEL}')`, `ipcRenderer.send('close-choice', choice)`]);
   });
 });

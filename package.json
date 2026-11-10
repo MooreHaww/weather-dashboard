@@ -1,7 +1,7 @@
 {
   "name": "weather-dashboard",
   "productName": "Weather Dashboard",
-  "version": "1.7.1",
+  "version": "1.9.0",
   "description": "A dark, modern desktop weather app powered by Open-Meteo.",
   "author": "Mohammad (Moore) Hawwari",
   "license": "MIT",
@@ -40,7 +40,7 @@
     "dev": "concurrently -k -n vite,tsc,app -c blue,gray,green \"vite\" \"tsc -p tsconfig.node.json -w --preserveWatchOutput\" \"wait-on tcp:127.0.0.1:5173 file:dist/main/main.js && cross-env VITE_DEV_URL=http://127.0.0.1:5173 electron .\"",
     "dev:server": "concurrently -k -n api,vite \"tsx watch src/server/index.ts\" \"vite\"",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "npm run clean && tsc -p tsconfig.node.json && vite build",
+    "build": "npm run clean && tsc -p tsconfig.node.json && node -e \"require('fs').copyFileSync('build/icon.png', 'dist/main/icon.png')\" && vite build",
     "start": "npm run build && electron .",
     "test": "vitest run",
     "test:watch": "vitest",

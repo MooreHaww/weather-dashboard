@@ -46,4 +46,18 @@ export const api = {
   detectLocation: () => call<Place>('/api/location', { method: 'POST' }),
 
   saveSettings: (s: Partial<Settings>) => call<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(s) }),
+
+  /** v1.9: "Start with Windows" as the OS reports it (nothing is stored). */
+  startup: () => call<StartupState>('/api/startup'),
+  setStartup: (enabled: boolean) => call<StartupState>('/api/startup', { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  /** v1.9: one fixed test notification (at most one per 5 s). */
+  testAlert: async (): Promise<void> => {
+    const res = await fetch('/api/rain-alerts/test', { method: 'POST' }).catch(() => null);
+    if (!res || !res.ok) throw new ApiError('No test notification', res?.status ?? 0);
+  },
 };
+
+export interface StartupState {
+  supported: boolean;
+  enabled: boolean;
+}

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { HttpError } from '../errors';
-import { APPEARANCES, TEMP_LABELS, TIME_FORMATS, WIND_UNITS } from '../../shared/types';
+import { APPEARANCES, CLOSE_BEHAVIORS, TEMP_LABELS, TIME_FORMATS, WIND_UNITS } from '../../shared/types';
 import { toPlace, type Storage } from '../storage';
 
 function placeFromBody(body: unknown) {
@@ -71,6 +71,10 @@ export function stateRoutes(storage: Storage): Router {
     // The page may only answer the consent card; 'ask' is the not-answered-yet state and is never set by a request.
     oneOf('location', ['on', 'off']);
     oneOf('appearance', APPEARANCES);
+    oneOf('closeBehavior', CLOSE_BEHAVIORS);
+    if (body.rainAlerts !== undefined && typeof body.rainAlerts !== 'boolean') {
+      throw new HttpError(400, '"rainAlerts" must be true or false');
+    }
     res.json((await storage.updateSettings(body)).settings);
   });
 

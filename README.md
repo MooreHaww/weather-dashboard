@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.7.1-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v1.9.0-orange?style=for-the-badge)
 
 | ![Clear day, glass look](docs/theme-clear.png) | ![Night, glass look](docs/theme-night.png) | ![Rain, glass look](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -91,8 +91,8 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (516 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (222 tests, needs internet) |
+| `npm test` | Unit and API tests (584 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (232 tests, needs internet) |
 | `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (11 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
@@ -126,14 +126,15 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 
 | Section | Options |
 |---|---|
-| **Updates** | Always first. The installed version and the state: "Version 1.5.1 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when you close the app. Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
+| **Updates** | Always first. The installed version and the state: "Version 1.5.1 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when the app quits (**Exit**, or **Quit** in the tray; closing a window that keeps running in the tray is not quitting). Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
 | **Look** | **Classic** or **Glass**, applied at once. Classic is an opaque dark page whose colour follows the weather and the time of day; Glass is Windows' acrylic glass. Glass is disabled where Windows cannot draw it (older than Windows 11 22H2, "Transparency effects" off, high contrast or reduced transparency); the **i** button next to it says "Glass needs Windows 11 22H2 or newer with Transparency effects on." If glass becomes possible later (for example, transparency effects turned back on), a saved Glass choice applies without a restart |
+| **Background** | **When I close the window**: **Ask** (default), **Keep running** or **Exit**. Ask shows "Close Weather Dashboard?" with **Keep running** and **Exit** and a **Remember my choice** box; `Esc` keeps the window open. Keep running hides the window and the app stays in the tray (left click or **Open Weather Dashboard** brings it back; **Quit** ends it). Exit quits as before 1.9. **Start with Windows**: a switch that shows what Windows says right now (it is read again each time Settings opens, since you can also change it in Windows Settings > Apps > Startup); started this way, the app opens hidden in the tray. It works only in the installed app; elsewhere it is off and disabled, and its **i** button says why. **Rain alerts**: off until you turn it on; **Send a test** shows a test notification. Its **i** button says which city is used and that Windows can block notifications |
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 | **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
 | **Location** | **Use my location** switch. It is off until you answer the card in the sidebar. On: the app asks GeoJS for your city (by IP address, at each start) and says "Near Paris, France. This is approximate."; if it cannot, "Couldn't find your location. It tries again the next time the app starts." Off: no lookup is made and the stored place is deleted. The section says what is sent: "Uses your IP address, sent to GeoJS." The **i** button next to the switch opens "How your IP address is used", the same text as under [Privacy](#privacy); `Esc` or a click outside closes it and leaves Settings open |
 
-Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). The look is decided once, the first time 1.7 reads the file, and saved straight away: no file (a new install) gives Classic, a file without the field (an update from 1.6 or older) gives Glass. Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (startup, close behavior, widget) the same way. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). The look is decided once, the first time 1.7 reads the file, and saved straight away: no file (a new install) gives Classic, a file without the field (an update from 1.6 or older) gives Glass. Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (widget) the same way. The close choice and rain alerts are saved like the other settings (files from 1.7.1 and older load with Ask and alerts off); Start with Windows is not saved by the app at all, because Windows' own startup entry is the only record. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -207,6 +208,9 @@ Electron main process
   - **GitHub**, to check this repository's releases for updates and download them (installed app only);
   - **GeoJS**, only after you answer "Use my location" with yes and while the switch is on: `https://get.geojs.io/v1/ip/geo.json` (below).
 - The window itself can only talk to the app's own local server. Links you click open in your browser.
+- Running in the background (1.9) adds no new service. The tray temperature and the rain alerts use the same Open-Meteo forecast request the window makes, through the same 10-minute cache, for one city: Your location if it is on, else your first favorite, else the last city you viewed. The IP-based lookup is still made only while "Use my location" is on.
+- Rain alerts are Windows notifications made on this PC; nothing is sent anywhere to show them. They are off until you turn them on.
+- **Start with Windows** adds the app to Windows' own list of startup apps (for your user only), with one argument that makes it start hidden in the tray. Turning it off removes the entry. The app keeps no copy of this setting.
 
 The text below is the same one the **i** button next to "Use my location" shows in Settings (a test checks that they match each other and the code):
 
@@ -237,6 +241,10 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - **Glass needs Windows 11 22H2 or newer:** the full glass effect needs Windows 11 22H2 or newer, with "Transparency effects" on in Windows. Otherwise (Windows 10, older Windows 11, transparency effects off, high contrast, reduced transparency) the app shows the classic look and the Glass option in Settings is disabled. While the window is not focused, Windows shows a flat grey instead of the glass.
 - **Text on bare glass over a very bright wallpaper:** the app name, the sidebar section titles, the empty-list lines and the footer sit on the glass with only a text shadow, so over a very bright wallpaper or window they can be hard to read. Text on the boxes stays readable. The sidebar rows are on bare glass too: city names and numbers keep 4.5:1 over black and a dark window, but over a light weather wash on a mid-grey desktop they can fall under 3:1.
 - **Daylight-saving hour labels:** in the week before a clock change, the hours after the change are labelled one hour off (see [Code review (v1.4.5)](#code-review-v145)).
+- **The tray icon may be hidden:** Windows 11 puts new tray icons in the overflow menu (the ^ arrow) until you drag them out or turn them on in Settings > Personalization > Taskbar.
+- **Notifications depend on Windows:** rain alerts show only if Windows allows notifications for the app and Do not disturb / Focus Assist is off.
+- **Rain timing is hourly:** the forecast gives rain per hour (Open-Meteo's 15-minute data is only real for North America and Central Europe), so an alert names the hour the rain is expected, for example "Rain expected around 4 PM", not the minute. It can only be as right as the forecast.
+- **Updates while running in the background:** a downloaded update installs when the app quits. If the window only hides when you close it, the update installs through **Update now** in Settings, or when you choose **Quit** in the tray (or **Exit**).
 
 ## 🗺️ Roadmap
 
@@ -339,14 +347,14 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - [x] Rain headline ignores hours with a high chance but almost no rain (1.7.1)
 
 ### v1.8 - Background mode
-- [ ] Close-button choice: exit completely, or keep running in the background (which keeps the widget alive)
-- [ ] Start with Windows: option to launch the app on PC startup
-- [ ] Tray icon that shows the current temperature
+- [x] Close-button choice: exit completely, or keep running in the background (which keeps the widget alive)
+- [x] Start with Windows: option to launch the app on PC startup
+- [x] Tray icon that shows the current temperature
 
 #### v1.8 (Fixes)
 
 ### v1.9 - Rain alerts
-- [ ] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
+- [x] Rain alerts, e.g. a notification "Rain starting in about 30 minutes"
 
 #### v1.9 (Fixes)
 

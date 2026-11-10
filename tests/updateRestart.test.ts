@@ -90,6 +90,6 @@ describe('the "Update now" message in the main process', () => {
   it('the preload sends the restart message with no arguments (v1.5 added one more message, "update-check", which has its own test)', () => {
     const preload = readFileSync(path.join(__dirname, '..', 'src', 'main', 'preload.ts'), 'utf8');
     const sends = [...preload.matchAll(/ipcRenderer\.(send|sendSync|invoke|postMessage)\(([^)]*)\)/g)].map((m) => m[0]);
-    expect(sends).toEqual([`ipcRenderer.send('${RESTART_CHANNEL}')`, `ipcRenderer.send('${CHECK_CHANNEL}')`]);
+    expect(sends).toEqual([`ipcRenderer.send('${RESTART_CHANNEL}')`, `ipcRenderer.send('${CHECK_CHANNEL}')`, `ipcRenderer.send('close-choice', choice)`]);
   });
 });

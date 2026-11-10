@@ -98,6 +98,7 @@ describe('Settings > Look', () => {
     expect(await page.evaluate<string[]>(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Updates',
       'Look',
+      'Background',
       'Units',
       'Time format',
       'Temperature chart',

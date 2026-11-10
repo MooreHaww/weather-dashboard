@@ -21,7 +21,7 @@ describe('Storage', () => {
     expect(await s.get()).toEqual({
       favorites: [],
       recent: [],
-      settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' },
+      settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false },
       lastPlace: null,
       myLocation: null,
     });
@@ -79,29 +79,29 @@ describe('Storage', () => {
     const s = new Storage(dir);
     await writeFile(s.filePath, JSON.stringify({ version: 1, favorites: [place(1)], settings: { units: 'imperial' } }));
     const state = await s.get();
-    expect(state.settings).toEqual({ units: 'imperial', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'glass' });
+    expect(state.settings).toEqual({ units: 'imperial', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'glass', closeBehavior: 'ask', rainAlerts: false });
     expect(state.favorites).toHaveLength(1);
   });
 
   it('falls back to defaults for invalid time format and wind unit', async () => {
     const s = new Storage(dir);
     await writeFile(s.filePath, JSON.stringify({ settings: { timeFormat: '36h', windUnit: 'knots' } }));
-    expect((await s.get()).settings).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'glass' });
+    expect((await s.get()).settings).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'glass', closeBehavior: 'ask', rainAlerts: false });
   });
 
   it('saves and reloads time format and wind unit, ignoring invalid patch values', async () => {
     const a = new Storage(dir);
     await a.updateSettings({ timeFormat: '24h', windUnit: 'ms', tempLabels: '1h' });
     await a.updateSettings({ timeFormat: 'nope', windUnit: 'ms', tempLabels: '5h' });
-    expect((await new Storage(dir).get()).settings).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'ms', tempLabels: '1h', location: 'ask', appearance: 'classic' });
+    expect((await new Storage(dir).get()).settings).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'ms', tempLabels: '1h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false });
     await a.updateSettings({ units: 'imperial' }); // a partial patch keeps the rest
-    expect((await new Storage(dir).get()).settings).toEqual({ units: 'imperial', timeFormat: '24h', windUnit: 'ms', tempLabels: '1h', location: 'ask', appearance: 'classic' });
+    expect((await new Storage(dir).get()).settings).toEqual({ units: 'imperial', timeFormat: '24h', windUnit: 'ms', tempLabels: '1h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false });
   });
 
   it('loads a settings file from before tempLabels existed with the default (every 3 hours)', async () => {
     const s = new Storage(dir);
     await writeFile(s.filePath, JSON.stringify({ version: 1, settings: { units: 'imperial', timeFormat: '24h', windUnit: 'mph' } }));
-    expect((await s.get()).settings).toEqual({ units: 'imperial', timeFormat: '24h', windUnit: 'mph', tempLabels: '3h', location: 'ask', appearance: 'glass' });
+    expect((await s.get()).settings).toEqual({ units: 'imperial', timeFormat: '24h', windUnit: 'mph', tempLabels: '3h', location: 'ask', appearance: 'glass', closeBehavior: 'ask', rainAlerts: false });
   });
 
   it('ignores an invalid saved tempLabels', async () => {

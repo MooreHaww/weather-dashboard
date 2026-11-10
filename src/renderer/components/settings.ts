@@ -2,9 +2,10 @@
 // the whole window, frosting the dashboard behind it. Add sections to
 // SETTINGS_SECTIONS below (see "Settings panel" in the README).
 
+import { RAIN_ALERT_FACTS, STARTUP_FACTS } from '../../shared/backgroundText';
 import { LOCATION_FACTS, LOCATION_SETTINGS_LINE } from '../../shared/locationText';
 import { formatTime } from '../../shared/time';
-import { WIND_LABELS, type Appearance, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
+import { WIND_LABELS, type Appearance, type CloseBehavior, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
 
 export interface SettingsSection {
   /** Unique id, used for the section's DOM id ("settings-<id>"). */
@@ -35,6 +36,15 @@ export interface SettingsBindings {
   locationStatus(): string;
   /** The selected city's current local time ("YYYY-MM-DDTHH:mm:ss"), used for the time-format examples. */
   now(): string;
+  /** Settings > Background (v1.9). */
+  setCloseBehavior(closeBehavior: CloseBehavior): void;
+  /** "Start with Windows" as the OS last reported it (read again when the panel opens); null before the first answer. */
+  startup(): { supported: boolean; enabled: boolean } | null;
+  setStartup(on: boolean): void;
+  setRainAlerts(on: boolean): void;
+  sendTestAlert(): void;
+  /** Called each time the panel opens (re-reads the OS login item). */
+  onOpen?(): void;
 }
 
 let bindings: SettingsBindings | null = null;
@@ -95,14 +105,19 @@ export function segmentedControl<T extends string>(opts: {
  * An on/off switch (role="switch"). Pressing it calls `onChange` with the new value; the caller
  * changes the setting and syncs the panel, which is what flips `aria-checked`.
  */
-export function switchControl(opts: { current: () => boolean; onChange: (on: boolean) => void }): HTMLButtonElement {
+export function switchControl(opts: { current: () => boolean; onChange: (on: boolean) => void; disabled?: () => boolean }): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'switch';
   b.setAttribute('role', 'switch');
   b.innerHTML = '<span class="switch-knob" aria-hidden="true"></span>';
-  b.addEventListener('click', () => opts.onChange(b.getAttribute('aria-checked') !== 'true'));
-  const sync = () => b.setAttribute('aria-checked', String(opts.current()));
+  b.addEventListener('click', () => {
+    if (!b.disabled) opts.onChange(b.getAttribute('aria-checked') !== 'true');
+  });
+  const sync = () => {
+    b.setAttribute('aria-checked', String(opts.current()));
+    b.disabled = opts.disabled?.() ?? false;
+  };
   syncers.add(sync);
   sync();
   return b;
@@ -133,6 +148,56 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       row.querySelector('.settings-row-label')!.classList.add('sr-only');
       row.querySelector('.settings-row-control')!.append(...infoPopover({ id: 'look-info', label: 'About Glass', lines: [LOOK_GLASS_NEEDS] }));
       body.append(row);
+    },
+  },
+  {
+    id: 'background',
+    title: 'Background',
+    render(body) {
+      body.append(
+        settingsRow({
+          label: 'When I close the window',
+          control: segmentedControl<CloseBehavior>({
+            options: [
+              { value: 'ask', label: 'Ask' },
+              { value: 'background', label: 'Keep running' },
+              { value: 'exit', label: 'Exit' },
+            ],
+            current: () => bindings!.get().closeBehavior,
+            onChange: (v) => bindings!.setCloseBehavior(v),
+          }),
+        }),
+      );
+
+      const startupSwitch = switchControl({
+        current: () => bindings!.startup()?.enabled ?? false,
+        disabled: () => !bindings!.startup()?.supported,
+        onChange: (on) => bindings!.setStartup(on),
+      });
+      startupSwitch.id = 'settings-startup'; // before settingsRow, so the row's label points at it
+      const startup = settingsRow({ label: 'Start with Windows', control: startupSwitch });
+      startup.querySelector('.settings-row-control')!.append(
+        ...infoPopover({ id: 'startup-info', label: 'About Start with Windows', ...STARTUP_FACTS }),
+      );
+      body.append(startup);
+
+      const alertSwitch = switchControl({
+        current: () => bindings!.get().rainAlerts,
+        onChange: (on) => bindings!.setRainAlerts(on),
+      });
+      alertSwitch.id = 'settings-rain-alerts';
+      const alerts = settingsRow({ label: 'Rain alerts', control: alertSwitch });
+      const test = document.createElement('button');
+      test.type = 'button';
+      test.className = 'button button-small';
+      test.id = 'rain-alert-test';
+      test.textContent = 'Send a test';
+      test.addEventListener('click', () => bindings!.sendTestAlert());
+      alerts.querySelector('.settings-row-control')!.append(
+        test,
+        ...infoPopover({ id: 'rain-alert-info', label: 'About rain alerts', ...RAIN_ALERT_FACTS }),
+      );
+      body.append(alerts);
     },
   },
   {
@@ -511,6 +576,7 @@ export function setupSettings(b: SettingsBindings): { open: () => void; close: (
     background.forEach((el) => (el.inert = true));
     gear.setAttribute('aria-expanded', 'true');
     (focusables()[0] ?? sheet).focus();
+    b.onOpen?.();
   }
 
   function hide(): void {
@@ -568,6 +634,8 @@ export function setupSettings(b: SettingsBindings): { open: () => void; close: (
 
   // If focus ever lands outside the open panel, bring it back.
   document.addEventListener('focusin', (e) => {
+    // The close dialog (v1.9) sits over everything, the panel included: leave its focus alone.
+    if ((e.target as Element | null)?.closest?.('#close-confirm')) return;
     if (open && !sheet.contains(e.target as Node)) (focusables()[0] ?? sheet).focus();
   });
 

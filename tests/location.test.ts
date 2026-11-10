@@ -335,7 +335,7 @@ describe('Storage and the location fields', () => {
     await copyFile(fixture, path.join(dir, 'weather-dashboard.json'));
     const saved = JSON.parse(await readFile(fixture, 'utf8')) as { settings: Record<string, string> } & Record<string, unknown>;
     delete saved.version;
-    expect(await new Storage(dir).get()).toEqual({ ...saved, settings: { ...saved.settings, location: 'ask', appearance: 'glass' }, myLocation: null });
+    expect(await new Storage(dir).get()).toEqual({ ...saved, settings: { ...saved.settings, location: 'ask', appearance: 'glass', closeBehavior: 'ask', rainAlerts: false }, myLocation: null });
   });
 
   it('writes a 1.4.7 file back with the old fields untouched and the new ones added', async () => {
@@ -344,7 +344,7 @@ describe('Storage and the location fields', () => {
     const before = JSON.parse(await readFile(fixture, 'utf8')) as { settings: Record<string, string> };
     await new Storage(dir).updateSettings({ units: 'metric' });
     const after = JSON.parse(await readFile(path.join(dir, 'weather-dashboard.json'), 'utf8')) as typeof before;
-    expect(after).toEqual({ ...before, settings: { ...before.settings, units: 'metric', location: 'ask', appearance: 'glass' }, myLocation: null });
+    expect(after).toEqual({ ...before, settings: { ...before.settings, units: 'metric', location: 'ask', appearance: 'glass', closeBehavior: 'ask', rainAlerts: false }, myLocation: null });
   });
 
   it('setMyLocation stores the place only while the setting is "on", and only a place with the location id', async () => {

@@ -6,6 +6,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import {
   APPEARANCES,
+  CLOSE_BEHAVIORS,
   LOCATION_PLACE_ID,
   LOCATION_SETTINGS,
   TEMP_LABELS,
@@ -26,7 +27,16 @@ interface StoredFile extends AppState {
 
 export function defaultSettings(): Settings {
   // A fresh install starts classic. A file written before 1.7 has no appearance: it gets 'glass' (see sanitize and load).
-  return { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic' };
+  return {
+    units: 'metric',
+    timeFormat: '12h',
+    windUnit: 'kmh',
+    tempLabels: '3h',
+    location: 'ask',
+    appearance: 'classic',
+    closeBehavior: 'ask',
+    rainAlerts: false,
+  };
 }
 
 export function defaultState(): AppState {
@@ -43,6 +53,8 @@ export function validSettings(raw: unknown): Partial<Settings> {
   if (TEMP_LABELS.includes(o.tempLabels as never)) out.tempLabels = o.tempLabels as Settings['tempLabels'];
   if (LOCATION_SETTINGS.includes(o.location as never)) out.location = o.location as Settings['location'];
   if (APPEARANCES.includes(o.appearance as never)) out.appearance = o.appearance as Settings['appearance'];
+  if (CLOSE_BEHAVIORS.includes(o.closeBehavior as never)) out.closeBehavior = o.closeBehavior as Settings['closeBehavior'];
+  if (typeof o.rainAlerts === 'boolean') out.rainAlerts = o.rainAlerts;
   return out;
 }
 
@@ -96,9 +108,12 @@ export class Storage {
   private state: AppState | null = null;
   private loading: Promise<AppState> | null = null;
   private writeChain: Promise<void> = Promise.resolve();
+  /** v1.9: called with a copy of the state after every successful write (the main process applies settings from it). */
+  private readonly onChange?: (state: AppState) => void;
 
-  constructor(dataDir: string) {
+  constructor(dataDir: string, onChange?: (state: AppState) => void) {
     this.filePath = path.join(dataDir, FILE_NAME);
+    this.onChange = onChange;
   }
 
   private async load(): Promise<AppState> {
@@ -151,6 +166,13 @@ export class Storage {
     const write = this.writeChain.then(() => this.writeAtomic(JSON.stringify(snapshot, null, 2)));
     this.writeChain = write.catch(() => {});
     await write;
+    if (this.onChange) {
+      try {
+        this.onChange(structuredClone(state));
+      } catch {
+        // A listener's failure never fails the request that saved.
+      }
+    }
     return structuredClone(state);
   }
 
