@@ -148,6 +148,11 @@ describe('Settings > Background', () => {
     appearance: 'classic',
     closeBehavior: 'ask',
     rainAlerts: false,
+    widget: false,
+    widgetSize: 'small',
+    widgetOnTop: false,
+    widgetBackground: 'wallpaper',
+    widgetEffects: true,
   };
   let startup: { supported: boolean; enabled: boolean } | null = null;
   const bindings: SettingsBindings = {
@@ -165,6 +170,7 @@ describe('Settings > Background', () => {
     startup: () => startup,
     setStartup: vi.fn(),
     setRainAlerts: vi.fn((on: boolean) => void (settings.rainAlerts = on)),
+    setWidget: vi.fn(),
     sendTestAlert: vi.fn(),
     onOpen: vi.fn(),
   };

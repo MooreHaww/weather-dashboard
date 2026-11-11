@@ -55,7 +55,8 @@ async function chooseOption(value: string) {
 const checkedOptions = () =>
   page.evaluate<string[]>(
     // Look (1.7) is left out here: which option is checked depends on this PC (tests/e2e/look.e2e.ts covers it).
-    `[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[aria-checked="true"]')].map((b) => b.dataset.value)`,
+    // Radio options only: the switches (v1.9, v2.0) have no value.
+    `[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[role="radio"][aria-checked="true"]')].map((b) => b.dataset.value)`,
   );
 const clockText = () => page.evaluate<string>(`document.getElementById('clock-time').textContent`);
 const windUnitIs = (unit: string) =>
@@ -96,17 +97,18 @@ describe('settings panel', () => {
     expect(dialog).toEqual({ role: 'dialog', modal: 'true', name: 'Settings' });
     expect(await page.evaluate(`document.getElementById('settings-button').getAttribute('aria-expanded')`)).toBe('true');
     expect(await focusInPanel()).toBe(true);
-    // Exactly the real sections: no placeholder for the widget.
+    // Exactly the real sections.
     expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections h3')].map((h) => h.textContent)`)).toEqual([
       'Updates',
       'Look',
       'Background',
+      'Widget',
       'Units',
       'Time format',
       'Temperature chart',
       'Location',
     ]);
-    expect(await checkedOptions()).toEqual(['ask', 'metric', 'kmh', '12h', '3h']);
+    expect(await checkedOptions()).toEqual(['ask', 'small', 'wallpaper', 'metric', 'kmh', '12h', '3h']);
   });
 
   it('is a full-window liquid-glass layer that blurs the app behind it', async () => {

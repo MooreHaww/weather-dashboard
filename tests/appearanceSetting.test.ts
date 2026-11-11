@@ -53,23 +53,23 @@ describe('the look is decided once, at the first read', () => {
     await copyFile(FIXTURE, file());
     const saved = JSON.parse(await readFile(FIXTURE, 'utf8')) as { settings: Record<string, unknown> } & Record<string, unknown>;
     delete saved.version;
-    expect(await new Storage(dir).get()).toEqual({ ...saved, settings: { ...saved.settings, appearance: 'glass', closeBehavior: 'ask', rainAlerts: false } });
+    expect(await new Storage(dir).get()).toEqual({ ...saved, settings: { ...saved.settings, appearance: 'glass', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true } });
     const after = await onDisk();
-    expect(after).toEqual({ ...saved, version: 1, settings: { ...saved.settings, appearance: 'glass', closeBehavior: 'ask', rainAlerts: false } });
+    expect(after).toEqual({ ...saved, version: 1, settings: { ...saved.settings, appearance: 'glass', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true } });
   });
 });
 
 describe('validation', () => {
   it('validSettings keeps only "classic" or "glass"', () => {
     expect(validSettings({ appearance: 'classic' })).toEqual({ appearance: 'classic' });
-    expect(validSettings({ appearance: 'glass', closeBehavior: 'ask', rainAlerts: false })).toEqual({ appearance: 'glass', closeBehavior: 'ask', rainAlerts: false });
+    expect(validSettings({ appearance: 'glass', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true })).toEqual({ appearance: 'glass', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true });
     for (const bad of ['solid', 'Glass', '', 1, null, ['glass']]) expect(validSettings({ appearance: bad })).toEqual({});
   });
 
   it('PATCH /api/settings saves the look, rejects anything else with 400, and a restart keeps it', async () => {
     const app = makeApp();
     expect((await request(app).get('/api/settings').expect(200)).body.appearance).toBe('classic');
-    const res = await request(app).patch('/api/settings').send({ appearance: 'glass', closeBehavior: 'ask', rainAlerts: false }).expect(200);
+    const res = await request(app).patch('/api/settings').send({ appearance: 'glass', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true }).expect(200);
     expect(res.body.appearance).toBe('glass');
     for (const bad of ['solid', 'auto', 3]) await request(app).patch('/api/settings').send({ appearance: bad }).expect(400);
     expect((await request(makeApp()).get('/api/settings').expect(200)).body.appearance).toBe('glass');

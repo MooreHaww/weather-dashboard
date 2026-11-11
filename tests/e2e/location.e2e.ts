@@ -119,7 +119,7 @@ describe('before the user answers', () => {
     expect(await geoCalls()).toEqual([]);
     expect(await placeName()).toBe('Tokyo');
     await openSettings();
-    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[aria-checked="true"]')].map((b) => b.dataset.value)`)).toEqual(['ask', 'imperial', 'mph', '24h', '2h']); // Look (1.7) depends on the PC; 'ask' is 1.9's close default
+    expect(await page.evaluate(`[...document.querySelectorAll('#settings-sections > :not(#settings-look) button[role="radio"][aria-checked="true"]')].map((b) => b.dataset.value)`)).toEqual(['ask', 'small', 'wallpaper', 'imperial', 'mph', '24h', '2h']); // Look (1.7) depends on the PC; 'ask' is 1.9's close default; Small and Wallpaper are 2.0's widget defaults
     await closeSettings();
   });
 
@@ -428,7 +428,29 @@ describe('purple "Your location" and the pin (1.5.1)', () => {
   });
 
   it('text on the purple card and the pin are readable against what is really drawn behind them', async () => {
-    await start(THREE_KINDS);
+    await start({ ...THREE_KINDS, settings: { ...THREE_KINDS.settings, appearance: 'classic' } });
+    // Classic (2.0): a seeded file without "appearance" opens in Glass, which shows whatever is on the real desktop behind
+    // the window. Staged weather: every city is "clear" at night, whatever the real weather and clock, so the background
+    // behind the card is the same on every run (live weather in Paris used to give a light theme on some days).
+    await page.reloadWithScript(`(() => {
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (input, init) => {
+        const res = await realFetch(input, init);
+        if (!String(input).includes('/api/weather') || !res.ok) return res;
+        const body = await res.json();
+        const d = body.data;
+        d.current.weatherCode = 0;
+        d.current.isDay = false;
+        d.hourly.weatherCode = d.hourly.weatherCode.map(() => 0);
+        d.hourly.isDay = d.hourly.isDay.map(() => false);
+        d.daily.weatherCode = d.daily.weatherCode.map(() => 0);
+        // Sunset before sunrise: unusable sun times, so the phase falls back to is_day (night). Still valid times for the hero.
+        d.daily.sunrise = d.daily.time.map((t) => t + 'T00:01');
+        d.daily.sunset = d.daily.time.map((t) => t + 'T00:00');
+        return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      };
+    })()`);
+    await waitForDashboard(page);
     await page.waitFor(`document.querySelector('#location-list .place-card')`, 15000);
     await show('#location-list .place-card', 'Paris');
     const at = await page.evaluate<{ card: number[]; name: string; sub: string; pin: number[]; pinColor: string }>(`(() => {

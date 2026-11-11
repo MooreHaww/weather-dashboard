@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type AppPage, type LaunchedApp } from '../../scripts/launch';
+import { openWidget } from './widgetSupport';
 import { checkReleaseFiles } from '../../scripts/release-files';
 import { FIRST_CHECK_DELAY_MS } from '../../src/main/autoUpdate';
 import { UPDATE_NOTE_DETAIL, updateMessage } from '../../src/renderer/components/updateNote';
@@ -150,7 +151,8 @@ const restarts = () => app!.evaluateMain<{ args: unknown[]; state: Record<string
 
 async function clickOn(page: AppPage, selector: string) {
   const [x, y] = await page.evaluate<[number, number]>(
-    `(() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`,
+    // Scroll it into view first: since 2.0 (Widget section) Settings is taller than the window, so lower options start below the fold.
+    `(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.scrollIntoView({ block: 'nearest' }); const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`,
   );
   await page.click(x, y);
 }
@@ -352,6 +354,32 @@ describe('auto-update in the packaged app', () => {
     await stubInstaller(app, { quit: true });
     const { page, errors, dataDir } = app;
     await waitForDashboard(page);
+    await page.waitFor(noteVisible, FIRST_CHECK_DELAY_MS + 30_000);
+    await openSettings(page);
+    await clickOn(page, '#update-now');
+    await page.waitFor(confirmOpen, 2000);
+    expect(errors).toEqual([]);
+    await clickOn(page, '[data-action="restart"]');
+    expect(await app.waitForExit(15_000)).toBe(0);
+    const events = readFileSync(path.join(dataDir, 'quit-log.txt'), 'utf8').trim().split(/\r?\n/);
+    expect(events).toEqual(['quitAndInstall [true,true] state saved: true', 'before-quit', 'window close', 'will-quit', 'quit']);
+    await app.close();
+    app = undefined;
+  });
+
+  // v2.0: the same with the desktop widget open (a second window, so window-all-closed alone would not quit).
+  it('Restart quits by itself with the desktop widget open and Keep running set', async () => {
+    feed = await startFeed('ok');
+    cacheDir = await mkdtemp(path.join(tmpdir(), 'wd-update-cache-'));
+    app = await launchApp({ settings: { closeBehavior: 'background' } }, { executable: exe, env: { LOCALAPPDATA: cacheDir } });
+    await app.evaluateMain(`
+      const { autoUpdater } = process.mainModule.require('electron-updater');
+      autoUpdater.setFeedURL({ provider: 'generic', url: ${JSON.stringify(feed.url)} });
+    `);
+    await stubInstaller(app, { quit: true });
+    const { page, errors, dataDir } = app;
+    await waitForDashboard(page);
+    await openWidget(app);
     await page.waitFor(noteVisible, FIRST_CHECK_DELAY_MS + 30_000);
     await openSettings(page);
     await clickOn(page, '#update-now');

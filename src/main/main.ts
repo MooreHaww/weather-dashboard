@@ -35,6 +35,8 @@ import { CHECK_CHANNEL, createCheckHandler } from './updateCheck';
 import { createRestartHandler, RESTART_CHANNEL } from './updateRestart';
 import { createUpdateTracker, type UpdateTracker } from './updateTracker';
 import { loadWindowState, restoreBounds, saveWindowState } from './windowState';
+import { createWidget } from './widget';
+import { widgetModel } from '../shared/widget';
 
 /** electron-builder's appId: the installer's shortcuts carry it, so Windows notifications show the app's name. */
 const APP_USER_MODEL_ID = 'com.mhawwari.weatherdashboard';
@@ -58,6 +60,9 @@ let closePending = false; // the page was asked "Close Weather Dashboard?" and h
 let pageLoaded = false; // the page can show the close dialog
 let pendingMaximize = false; // started hidden with a maximized window state: maximize on first show
 const liveNotifications = new Set<Notification>(); // kept so their click handlers are not garbage-collected
+let widget: ReturnType<typeof createWidget> | null = null; // the desktop widget (v2.0), created once the server runs
+let trayWeather: TrayWeather = null; // the last tray city and weather: the widget shows the same
+let widgetTick: NodeJS.Timeout | null = null; // re-sends the widget's data each minute (time of day, next hours)
 
 const startup = createStartup({ supported: startupSupported({ isPackaged: app.isPackaged, devUrl }), items: app });
 
@@ -83,6 +88,7 @@ function dataDir(): string {
 }
 
 const windowStateFile = () => path.join(dataDir(), 'window-state.json');
+const widgetStateFile = () => path.join(dataDir(), 'widget-state.json');
 
 /** Save the window's size, position and maximized state (on close, on hide, and before an update restart). */
 function saveWindow(): void {
@@ -138,8 +144,10 @@ async function loadTrayWeather(): Promise<TrayWeather> {
 const backgroundWeather = createBackgroundWeather({
   load: loadTrayWeather,
   onUpdate: (value) => {
+    trayWeather = value;
     if (value) setTrayWeather(value.weather.current.temperature, trayText(value.place, value.weather));
     else setTrayWeather(null, TRAY_PLAIN_TEXT);
+    pushWidget();
   },
 });
 
@@ -151,11 +159,35 @@ const rainAlerts = createRainAlerts({
   notify,
 });
 
+/** The widget's data from the tray's city and weather (no request of its own). */
+function pushWidget(): void {
+  if (!widget || !settings?.widget) return;
+  const s = settings;
+  widget.setData(
+    widgetModel({
+      place: trayWeather?.place ?? null,
+      weather: trayWeather?.weather ?? null,
+      size: s.widgetSize,
+      effects: s.widgetEffects,
+      timeFormat: s.timeFormat,
+    }),
+  );
+}
+
 /** A saved change (settings, favorites, location, recent): apply what the main process owns. */
 function applyState(state: AppState): void {
   settings = state.settings;
   if (settings.rainAlerts) rainAlerts.start();
   else rainAlerts.stop();
+  if (!quitting) {
+    widget?.apply(settings);
+    if (settings.widget && !widgetTick) widgetTick = setInterval(pushWidget, 60_000);
+    if (!settings.widget && widgetTick) {
+      clearInterval(widgetTick);
+      widgetTick = null;
+    }
+    pushWidget();
+  }
   void backgroundWeather.refresh();
 }
 
@@ -257,7 +289,12 @@ function createWindow(url: string, mode: AppearanceMode, hidden: boolean): void 
       win!.webContents.send(CLOSE_REQUEST_CHANNEL); // receive-only; the answer comes back on CLOSE_CHOICE_CHANNEL
     }
   });
-  win.on('closed', () => (win = null));
+  // v2.0: the widget is a second window, so window-all-closed no longer fires when this one closes. Closing the main
+  // window for real (Exit, quitting, a close the page could not ask about) always quits the app.
+  win.on('closed', () => {
+    win = null;
+    app.quit();
+  });
   void win.loadURL(devUrl ?? url);
 }
 
@@ -315,6 +352,14 @@ if (!app.requestSingleInstanceLock()) {
       nativeTheme.on('updated', () => void appearance?.refresh());
       createWindow(url, appearance.current().mode, launchedHidden(process.argv));
       createAppTray({ plainIcon: path.join(__dirname, 'icon.png'), onOpen: showWindow, onQuit: exitApp });
+      widget = createWidget({
+        url,
+        devUrl,
+        stateFile: widgetStateFile(),
+        onOpen: showWindow,
+        onCloseWidget: () => void storage?.updateSettings({ widget: false }).catch(() => {}),
+        log,
+      });
       applyState(await storage!.get());
       backgroundWeather.start();
     } catch (err) {
@@ -381,6 +426,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => {
     quitting = true;
     rainAlerts.stop();
+    if (widgetTick) clearInterval(widgetTick);
     server?.close();
   });
 }

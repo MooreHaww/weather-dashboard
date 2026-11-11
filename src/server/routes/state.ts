@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { HttpError } from '../errors';
-import { APPEARANCES, CLOSE_BEHAVIORS, TEMP_LABELS, TIME_FORMATS, WIND_UNITS } from '../../shared/types';
+import { APPEARANCES, CLOSE_BEHAVIORS, TEMP_LABELS, TIME_FORMATS, WIDGET_BACKGROUNDS, WIDGET_SIZES, WIND_UNITS } from '../../shared/types';
 import { toPlace, type Storage } from '../storage';
 
 function placeFromBody(body: unknown) {
@@ -72,8 +72,10 @@ export function stateRoutes(storage: Storage): Router {
     oneOf('location', ['on', 'off']);
     oneOf('appearance', APPEARANCES);
     oneOf('closeBehavior', CLOSE_BEHAVIORS);
-    if (body.rainAlerts !== undefined && typeof body.rainAlerts !== 'boolean') {
-      throw new HttpError(400, '"rainAlerts" must be true or false');
+    oneOf('widgetSize', WIDGET_SIZES);
+    oneOf('widgetBackground', WIDGET_BACKGROUNDS);
+    for (const name of ['rainAlerts', 'widget', 'widgetOnTop', 'widgetEffects']) {
+      if (body[name] !== undefined && typeof body[name] !== 'boolean') throw new HttpError(400, `"${name}" must be true or false`);
     }
     res.json((await storage.updateSettings(body)).settings);
   });

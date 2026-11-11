@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { launchApp, waitForDashboard, type LaunchedApp, type Seed } from '../../scripts/launch';
+import { openWidget } from './widgetSupport';
 
 const root = path.join(__dirname, '..', '..');
 const exe = path.join(root, 'release', 'win-unpacked', 'Weather Dashboard.exe');
@@ -37,12 +38,12 @@ async function start(seed: Seed, args: string[] = []) {
 
 const windowState = (a: LaunchedApp) =>
   a.evaluateMain<{ count: number; visible: boolean }>(
-    `const { BrowserWindow } = process.mainModule.require('electron'); const w = BrowserWindow.getAllWindows()[0];
-     return { count: BrowserWindow.getAllWindows().length, visible: Boolean(w && w.isVisible()) };`,
+    `const { BrowserWindow } = process.mainModule.require('electron'); const w = BrowserWindow.getAllWindows().find((x) => !x.webContents.getURL().includes('/widget.html'));
+     return { count: BrowserWindow.getAllWindows().filter((x) => !x.webContents.getURL().includes('/widget.html')).length, visible: Boolean(w && w.isVisible()) };`,
   );
 const TRAY = `process.mainModule.require(process.mainModule.require('path').join(process.mainModule.require('electron').app.getAppPath(), 'dist', 'main', 'tray.js'))`;
 const closeWindow = (a: LaunchedApp) =>
-  a.evaluateMain(`const { BrowserWindow } = process.mainModule.require('electron'); setTimeout(() => BrowserWindow.getAllWindows()[0].close(), 20); return true;`);
+  a.evaluateMain(`const { BrowserWindow } = process.mainModule.require('electron'); setTimeout(() => BrowserWindow.getAllWindows().find((x) => !x.webContents.getURL().includes('/widget.html')).close(), 20); return true;`);
 
 async function waitUntil(check: () => Promise<boolean>, timeoutMs: number, what: string) {
   for (const deadline = Date.now() + timeoutMs; ; await sleep(150)) {
@@ -59,7 +60,7 @@ async function logQuit(a: LaunchedApp): Promise<string> {
     const { app, BrowserWindow } = process.mainModule.require('electron');
     const note = (m) => fs.appendFileSync(${JSON.stringify(file)}, m + '\\n');
     for (const ev of ['before-quit', 'will-quit', 'quit']) app.on(ev, () => note(ev));
-    BrowserWindow.getAllWindows()[0].on('close', () => note('window close'));
+    BrowserWindow.getAllWindows().find((x) => !x.webContents.getURL().includes('/widget.html')).on('close', () => note('window close'));
     return true;
   `);
   return file;
@@ -82,7 +83,7 @@ describe('the packaged app in the background', () => {
     await waitForDashboard(a.page);
     const file = await logQuit(a);
     await a.evaluateMain(
-      `const { BrowserWindow } = process.mainModule.require('electron'); const w = BrowserWindow.getAllWindows()[0];
+      `const { BrowserWindow } = process.mainModule.require('electron'); const w = BrowserWindow.getAllWindows().find((x) => !x.webContents.getURL().includes('/widget.html'));
        w.emit('query-session-end', { preventDefault() {}, reasons: ['shutdown'] }); w.emit('session-end', { reasons: ['shutdown'] });
        setTimeout(() => w.close(), 20); return true;`,
     );
@@ -127,5 +128,44 @@ describe('the packaged app in the background', () => {
     await waitUntil(async () => (await windowState(a)).visible, 5000, 'the window to show');
     expect((await windowState(a)).count).toBe(1);
     expect(a.errors).toEqual([]);
+  });
+
+  // v2.0: the desktop widget is a second window. None of these may be kept alive by it.
+  it('with the desktop widget open: "Exit" quits', async () => {
+    const a = await start({ lastPlace: london, settings: { closeBehavior: 'exit' } });
+    await waitForDashboard(a.page);
+    await openWidget(a);
+    const file = await logQuit(a);
+    await closeWindow(a);
+    expect(await a.waitForExit(15_000)).toBe(0);
+    expect(readFileSync(file, 'utf8').trim().split(/\r?\n/)).toEqual(['window close', 'before-quit', 'will-quit', 'quit']);
+    await a.close();
+    app = undefined;
+  });
+
+  it('with the desktop widget open: Windows ending the session quits even with Keep running', async () => {
+    const a = await start({ lastPlace: london, settings: { closeBehavior: 'background' } });
+    await waitForDashboard(a.page);
+    await openWidget(a);
+    await a.evaluateMain(
+      `const { BrowserWindow } = process.mainModule.require('electron'); const w = BrowserWindow.getAllWindows().find((x) => !x.webContents.getURL().includes('/widget.html'));
+       w.emit('query-session-end', { preventDefault() {}, reasons: ['shutdown'] }); w.emit('session-end', { reasons: ['shutdown'] });
+       setTimeout(() => w.close(), 20); return true;`,
+    );
+    expect(await a.waitForExit(15_000)).toBe(0);
+    await a.close();
+    app = undefined;
+  });
+
+  it("with the desktop widget open: the tray's Quit quits with the window hidden in the tray", async () => {
+    const a = await start({ lastPlace: london, settings: { closeBehavior: 'background' } });
+    await waitForDashboard(a.page);
+    await openWidget(a);
+    await closeWindow(a);
+    await waitUntil(async () => !(await windowState(a)).visible, 5000, 'the window to hide');
+    await a.evaluateMain(`const quit = ${TRAY}.trayMenu().items.find((i) => i.label === 'Quit'); setTimeout(() => quit.click(), 20); return true;`);
+    expect(await a.waitForExit(15_000)).toBe(0);
+    await a.close();
+    app = undefined;
   });
 });

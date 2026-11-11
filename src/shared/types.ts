@@ -29,6 +29,11 @@ export const APPEARANCES: readonly Appearance[] = ['classic', 'glass'];
  */
 export type CloseBehavior = 'ask' | 'background' | 'exit';
 export const CLOSE_BEHAVIORS: readonly CloseBehavior[] = ['ask', 'background', 'exit'];
+/** The desktop widget (v2.0): its size, and what its blurred background shows. */
+export type WidgetSize = 'small' | 'medium';
+export const WIDGET_SIZES: readonly WidgetSize[] = ['small', 'medium'];
+export type WidgetBackground = 'wallpaper' | 'live';
+export const WIDGET_BACKGROUNDS: readonly WidgetBackground[] = ['wallpaper', 'live'];
 /** The id of the detected place. Real places have positive ids, so this never collides with a favorite. */
 export const LOCATION_PLACE_ID = -1;
 
@@ -120,6 +125,13 @@ export interface Settings {
   closeBehavior: CloseBehavior;
   /** v1.9: Windows notifications before rain; off until the user turns it on. */
   rainAlerts: boolean;
+  /** v2.0: the desktop widget, off until the user turns it on. */
+  widget: boolean;
+  widgetSize: WidgetSize;
+  /** Above other windows (true) or a normal window they can cover (false). */
+  widgetOnTop: boolean;
+  widgetBackground: WidgetBackground;
+  widgetEffects: boolean;
 }
 
 export interface AppState {

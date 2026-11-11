@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Weather Dashboard widget</title>
+    <link rel="stylesheet" href="./widget/widget.css" />
+  </head>
+  <body>
+    <main class="card" id="card" data-size="small" aria-live="polite">
+      <canvas class="backdrop" id="backdrop" aria-hidden="true"></canvas>
+      <canvas class="effects" id="effects" aria-hidden="true"></canvas>
+      <div class="tint" id="tint" aria-hidden="true"></div>
+      <div class="content" id="content"></div>
+    </main>
+    <script type="module" src="./widget/main.ts"></script>
+  </body>
+</html>

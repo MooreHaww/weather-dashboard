@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
 // The app version (the same package.json Electron's app.getVersion() reads), shown in Settings.
@@ -14,6 +15,13 @@ export default defineConfig({
     outDir: '../../dist/renderer',
     emptyOutDir: true,
     target: 'chrome130',
+    // v2.0: the desktop widget is a second, small page served by the same local server under the same CSP.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./src/renderer/index.html', import.meta.url)),
+        widget: fileURLToPath(new URL('./src/renderer/widget.html', import.meta.url)),
+      },
+    },
   },
   server: {
     host: '127.0.0.1',

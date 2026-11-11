@@ -254,10 +254,10 @@ describe('favorites, recent and settings', () => {
   it('saves time format and wind unit, and an old state still loads with defaults', async () => {
     const app = makeApp();
     const defaults = await request(app).get('/api/settings').expect(200);
-    expect(defaults.body).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false });
+    expect(defaults.body).toEqual({ units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true });
 
     const res = await request(app).patch('/api/settings').send({ timeFormat: '24h', windUnit: 'mph', tempLabels: '2h' }).expect(200);
-    expect(res.body).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'mph', tempLabels: '2h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false });
+    expect(res.body).toEqual({ units: 'metric', timeFormat: '24h', windUnit: 'mph', tempLabels: '2h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true });
     expect((await request(makeApp()).get('/api/settings').expect(200)).body).toEqual(res.body);
   });
 

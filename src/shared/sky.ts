@@ -5,7 +5,7 @@
 //    saturated tint at low alpha, not from a near-white one, so only fog (and a little snow) whitens the glass. Glass has no glows any more.
 //  - classic: the same move on an opaque dark grey, so both looks are the same colour family.
 // Open-Meteo's code list (https://open-meteo.com/en/docs, "WMO Weather interpretation codes") also has 97 "Heavy
-// thunderstorm", which describeWeather() does not know (it shows "Unknown"); here it is a thunderstorm.
+// thunderstorm"; describeWeather() labels it "Thunderstorm" (2.0) and here it is a thunderstorm.
 // Open-Meteo has no tornado code: the most severe state is a thunderstorm with hail (96, 99).
 
 import { nearestPhase, type Phase, type PhaseBlend } from './phase';
@@ -44,7 +44,7 @@ const BY_CODE: Record<number, Sky> = {
   86: 'snow',
   95: 'storm',
   96: 'storm',
-  97: 'storm', // heavy thunderstorm (not in describeWeather)
+  97: 'storm', // heavy thunderstorm (describeWeather: "Thunderstorm" since 2.0)
   99: 'storm',
 };
 

@@ -51,6 +51,8 @@ const CODES: Record<number, CodeInfo> = {
   86: { label: 'Heavy snow showers', icon: 'snow', theme: 'snow' },
   95: { label: 'Thunderstorm', icon: 'thunder', theme: 'storm' },
   96: { label: 'Thunderstorm with hail', icon: 'thunder', theme: 'storm' },
+  // Not in Open-Meteo's list, but some models send it; the look already treats it as a storm (sky.ts).
+  97: { label: 'Thunderstorm', icon: 'thunder', theme: 'storm' },
   99: { label: 'Severe thunderstorm with hail', icon: 'thunder', theme: 'storm' },
 };
 

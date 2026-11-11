@@ -2,10 +2,10 @@
 // the whole window, frosting the dashboard behind it. Add sections to
 // SETTINGS_SECTIONS below (see "Settings panel" in the README).
 
-import { RAIN_ALERT_FACTS, STARTUP_FACTS } from '../../shared/backgroundText';
+import { RAIN_ALERT_FACTS, STARTUP_FACTS, WIDGET_BACKGROUND_FACTS, WIDGET_EFFECTS_FACTS } from '../../shared/backgroundText';
 import { LOCATION_FACTS, LOCATION_SETTINGS_LINE } from '../../shared/locationText';
 import { formatTime } from '../../shared/time';
-import { WIND_LABELS, type Appearance, type CloseBehavior, type Settings, type TempLabels, type TimeFormat, type Units, type WindUnit } from '../../shared/types';
+import { WIND_LABELS, type Appearance, type CloseBehavior, type Settings, type TempLabels, type TimeFormat, type Units, type WidgetBackground, type WidgetSize, type WindUnit } from '../../shared/types';
 
 export interface SettingsSection {
   /** Unique id, used for the section's DOM id ("settings-<id>"). */
@@ -43,8 +43,10 @@ export interface SettingsBindings {
   setStartup(on: boolean): void;
   setRainAlerts(on: boolean): void;
   sendTestAlert(): void;
-  /** Called each time the panel opens (re-reads the OS login item). */
+  /** Called each time the panel opens (re-reads the OS login item, and the settings: the widget's menu can turn it off). */
   onOpen?(): void;
+  /** Settings > Widget (v2.0): one setter for its five fields. */
+  setWidget(patch: Partial<Pick<Settings, 'widget' | 'widgetSize' | 'widgetOnTop' | 'widgetBackground' | 'widgetEffects'>>): void;
 }
 
 let bindings: SettingsBindings | null = null;
@@ -198,6 +200,50 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
         ...infoPopover({ id: 'rain-alert-info', label: 'About rain alerts', ...RAIN_ALERT_FACTS }),
       );
       body.append(alerts);
+    },
+  },
+  {
+    id: 'widget',
+    title: 'Widget',
+    render(body) {
+      const off = () => !bindings!.get().widget;
+      const on = switchControl({ current: () => bindings!.get().widget, onChange: (v) => bindings!.setWidget({ widget: v }) });
+      on.id = 'settings-widget-on';
+      body.append(settingsRow({ label: 'Widget', control: on }));
+      body.append(
+        settingsRow({
+          label: 'Size',
+          control: segmentedControl<WidgetSize>({
+            options: [
+              { value: 'small', label: 'Small', disabled: off },
+              { value: 'medium', label: 'Medium', disabled: off },
+            ],
+            current: () => bindings!.get().widgetSize,
+            onChange: (v) => bindings!.setWidget({ widgetSize: v }),
+          }),
+        }),
+      );
+      const top = switchControl({ current: () => bindings!.get().widgetOnTop, disabled: off, onChange: (v) => bindings!.setWidget({ widgetOnTop: v }) });
+      top.id = 'settings-widget-top';
+      body.append(settingsRow({ label: 'Keep on top', control: top }));
+      const bg = settingsRow({
+        label: 'Background',
+        control: segmentedControl<WidgetBackground>({
+          options: [
+            { value: 'wallpaper', label: 'Wallpaper', disabled: off },
+            { value: 'live', label: 'Live', disabled: off },
+          ],
+          current: () => bindings!.get().widgetBackground,
+          onChange: (v) => bindings!.setWidget({ widgetBackground: v }),
+        }),
+      });
+      bg.querySelector('.settings-row-control')!.append(...infoPopover({ id: 'widget-background-info', label: 'About the widget background', ...WIDGET_BACKGROUND_FACTS }));
+      body.append(bg);
+      const fx = switchControl({ current: () => bindings!.get().widgetEffects, disabled: off, onChange: (v) => bindings!.setWidget({ widgetEffects: v }) });
+      fx.id = 'settings-widget-effects';
+      const effects = settingsRow({ label: 'Weather effects', control: fx });
+      effects.querySelector('.settings-row-control')!.append(...infoPopover({ id: 'widget-effects-info', label: 'About weather effects', ...WIDGET_EFFECTS_FACTS }));
+      body.append(effects);
     },
   },
   {

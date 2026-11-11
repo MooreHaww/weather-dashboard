@@ -216,7 +216,8 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
         url: string;
         webSocketDebuggerUrl: string;
       }[];
-      target = list.find((t) => t.type === 'page' && t.url.startsWith('http://127.0.0.1'));
+      // The dashboard, not the desktop widget's page (v2.0, /widget.html on the same server).
+      target = list.find((t) => t.type === 'page' && t.url.startsWith('http://127.0.0.1') && !t.url.includes('/widget.html'));
     } catch {
       // DevTools endpoint not up yet
     }
@@ -234,7 +235,7 @@ export async function launchApp(seed?: Seed, opts: LaunchOptions = {}): Promise<
   const main = await Cdp.connect(await inspectorUrl);
   const inMain = <T>(body: string) =>
     main.evaluate<T>(
-      `(async () => { const { BrowserWindow } = process.mainModule.require('electron'); const win = BrowserWindow.getAllWindows()[0]; ${body} })()`,
+      `(async () => { const { BrowserWindow } = process.mainModule.require('electron'); const win = BrowserWindow.getAllWindows().find((w) => !w.__backdrop && !w.webContents.getURL().includes('/widget.html')) ?? BrowserWindow.getAllWindows()[0]; ${body} })()`,
     );
   // Keep animations running even if the test window is behind other windows.
   await inMain(`win.webContents.setBackgroundThrottling(false);`);

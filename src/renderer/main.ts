@@ -7,6 +7,7 @@ import {
   type Place,
   type Appearance,
   type CloseBehavior,
+  type Settings,
   type TempLabels,
   type TimeFormat,
   type Units,
@@ -51,7 +52,7 @@ const app = {
   state: {
     favorites: [],
     recent: [],
-    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false },
+    settings: { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true },
     lastPlace: null,
     myLocation: null,
   } as AppState,
@@ -385,6 +386,29 @@ function setRainAlerts(rainAlerts: boolean): void {
   api.saveSettings({ rainAlerts }).catch(() => {});
 }
 
+// ---------- widget (v2.0) ----------
+
+type WidgetPatch = Partial<Pick<Settings, 'widget' | 'widgetSize' | 'widgetOnTop' | 'widgetBackground' | 'widgetEffects'>>;
+
+/** Settings > Widget. The main process creates, changes or removes the widget when the setting is saved. */
+function setWidget(patch: WidgetPatch): void {
+  Object.assign(app.state.settings, patch);
+  syncSettingsControls();
+  api.saveSettings(patch).catch(() => {});
+}
+
+/** The widget's own menu ("Close widget") changes the setting in the main process: read the widget fields again. */
+async function readWidgetSettings(): Promise<void> {
+  try {
+    const { settings } = await api.state();
+    const { widget, widgetSize, widgetOnTop, widgetBackground, widgetEffects } = settings;
+    Object.assign(app.state.settings, { widget, widgetSize, widgetOnTop, widgetBackground, widgetEffects });
+    syncSettingsControls();
+  } catch {
+    // keep what the panel shows
+  }
+}
+
 /** Times are formatted from the weather we already have, so no reload is needed. */
 function setTimeFormat(timeFormat: TimeFormat): void {
   if (timeFormat === app.state.settings.timeFormat) return;
@@ -529,7 +553,11 @@ async function boot(): Promise<void> {
     setStartup: (on) => void setStartup(on),
     setRainAlerts,
     sendTestAlert: () => void api.testAlert().catch(() => {}),
-    onOpen: () => void readStartup(),
+    onOpen: () => {
+      void readStartup();
+      void readWidgetSettings();
+    },
+    setWidget,
   });
   // The main process asks before closing when "When I close the window" is Ask (v1.9).
   window.background?.onCloseRequest(() =>

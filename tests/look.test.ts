@@ -73,7 +73,7 @@ describe('setupAppearance: html[data-material] follows the choice and the system
 });
 
 describe('Settings > Look', () => {
-  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false };
+  const settings: Settings = { units: 'metric', timeFormat: '12h', windUnit: 'kmh', tempLabels: '3h', location: 'ask', appearance: 'classic', closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true };
   let supported = true;
   const setAppearance = vi.fn<(a: Appearance) => void>();
   const bindings: SettingsBindings = {
@@ -94,6 +94,7 @@ describe('Settings > Look', () => {
     startup: () => null,
     setStartup: vi.fn(),
     setRainAlerts: vi.fn(),
+    setWidget: vi.fn(),
     sendTestAlert: vi.fn(),
     now: () => '2026-11-08T10:00:00',
   };

@@ -98,6 +98,24 @@ function tokyoPos(): number {
   return Number(t.slice(11, 13)) + Number(t.slice(14, 16)) / 60;
 }
 
+/** Wait until the chart's "now" point has stayed in the same place for 5 frames in a row (no animation running). */
+async function stableNowPoint(): Promise<void> {
+  const settled = await page.evaluate<boolean>(`new Promise((resolve) => {
+    const c = document.getElementById('temp-chart');
+    let last = '', same = 0, frames = 0;
+    const tick = () => {
+      const now = c.dataset.nowX + ',' + c.dataset.nowY;
+      same = now === last ? same + 1 : 0;
+      last = now;
+      if (same >= 5) return resolve(true);
+      if (++frames > 300) return resolve(false);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  })`);
+  expect(settled).toBe(true);
+}
+
 const countIn = (color: string, x0: string, x1: string) => page.evaluate<number>(countPixelsBetween('temp-chart', color, x0, x1));
 
 const clickDay = (index: number) => page.evaluate(`document.querySelectorAll('.forecast .day')[${index}].click()`);
@@ -137,6 +155,7 @@ describe('temperature chart covers the whole day', () => {
 
   it('draws the dot at the city\'s current time (Tokyo, whatever the PC clock says)', async () => {
     await page.waitFor(`document.getElementById('temp-chart').dataset.nowX !== undefined`, 8000);
+    await stableNowPoint();
     const before = tokyoPos();
     const g = await geometry();
     const after = tokyoPos();
@@ -155,15 +174,21 @@ describe('temperature chart covers the whole day', () => {
     expect(g.nowX!).toBeLessThanOrEqual(hi);
 
     // The visible dot (an element over the chart) is centred there, with the series orange as its fill.
-    const dot = await page.evaluate<{ x: number; y: number; fill: string; hidden: boolean }>(`(() => {
-      const c = document.getElementById('temp-chart').getBoundingClientRect();
+    // The chart animates its points in (450 ms) and draws again after layout changes, and the dot follows each draw.
+    // Reading the point and the dot in two evaluations while it animated put them up to ~1.5 px apart (the flaky run
+    // before 2.0). So: wait until the point has stopped moving, then read both in the same frame.
+    await stableNowPoint();
+    const dot = await page.evaluate<{ x: number; y: number; nowX: number; nowY: number; fill: string; hidden: boolean }>(`(() => {
+      const canvas = document.getElementById('temp-chart');
+      const c = canvas.getBoundingClientRect();
       const d = document.querySelector('#now-dot');
       const r = d.querySelector('.core').getBoundingClientRect();
-      return { x: (r.left + r.right) / 2 - c.left, y: (r.top + r.bottom) / 2 - c.top, fill: getComputedStyle(d.querySelector('.core')).backgroundColor, hidden: d.hidden };
+      return { x: (r.left + r.right) / 2 - c.left, y: (r.top + r.bottom) / 2 - c.top, nowX: Number(canvas.dataset.nowX), nowY: Number(canvas.dataset.nowY),
+               fill: getComputedStyle(d.querySelector('.core')).backgroundColor, hidden: d.hidden };
     })()`);
     expect(dot.hidden).toBe(false);
-    expect(Math.abs(dot.x - g.nowX!)).toBeLessThanOrEqual(0.6);
-    expect(Math.abs(dot.y - g.nowY!)).toBeLessThanOrEqual(0.6);
+    expect(Math.abs(dot.x - dot.nowX)).toBeLessThanOrEqual(0.6);
+    expect(Math.abs(dot.y - dot.nowY)).toBeLessThanOrEqual(0.6);
     expect(dot.fill).toBe('rgb(255, 181, 71)');
   });
 
@@ -208,7 +233,8 @@ describe('temperature chart covers the whole day', () => {
 
   it('the legend has "Current time" with a small copy of the dot, in the same style as the other two entries', async () => {
     const legend = await page.evaluate<{ texts: string[]; nowShown: boolean; sameStyle: boolean; hasRing: boolean; hasCore: boolean }>(`(() => {
-      const items = [...document.querySelectorAll('.legend > span')];
+      // The temperature card's legend (the rain card has its own since 1.7.1: Light, Moderate, Heavy).
+      const items = [...document.getElementById('legend-now').closest('.legend').querySelectorAll(':scope > span')];
       const now = document.getElementById('legend-now');
       const cs = (e) => getComputedStyle(e);
       return {

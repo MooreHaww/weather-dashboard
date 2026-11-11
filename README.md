@@ -10,7 +10,7 @@
 ![Node](https://img.shields.io/badge/Node-22%20LTS-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
 ![API key](https://img.shields.io/badge/API%20key-none%20needed-success?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
-![Release](https://img.shields.io/badge/release-v1.9.0-orange?style=for-the-badge)
+![Release](https://img.shields.io/badge/release-v2.0.0-orange?style=for-the-badge)
 
 | ![Clear day, glass look](docs/theme-clear.png) | ![Night, glass look](docs/theme-night.png) | ![Rain, glass look](docs/theme-rain.png) |
 |:---:|:---:|:---:|
@@ -57,6 +57,7 @@ It is also **project #2** of my build plan. The goal was to ship something real:
 - **Check for updates (v1.5):** a button in the Updates section of Settings, for when you do not want to wait for the automatic check.
 - **Liquid glass look (v1.6):** on Windows 11 22H2 or newer the outer area of the window is Windows' acrylic glass, so what is behind the window shows through, blurred. It is tinted by the weather and the time of day of the shown city (nine weather groups and six times of day: morning, noon, afternoon, sunset, dusk and night, from the city's own sunrise and sunset). The boxes are translucent dark frosted glass and look the same in every weather. Where the effect is not available, the app keeps the plain dark look.
 - **Choose the look (v1.7):** **Settings > Look** switches between **Classic** and **Glass** at once, with no restart. The classic look now changes with the weather and the time of day too: the same weather groups and times of day as the glass tint, each with its own opaque dark background. New installs start in Classic; people who update from 1.6 keep Glass. Glass shows only where Windows can draw it; elsewhere the Glass option is disabled and its **i** button says what it needs.
+- **Desktop widget (v2.0):** a small weather card on the Windows desktop, see [Desktop widget](#desktop-widget).
 - **Works at any window size**, down to 480×400.
 - **Offline-friendly:** if the internet drops, it shows the last data it fetched and says so.
 - **Accessible:** every chart has a screen-reader data table.
@@ -91,9 +92,9 @@ npm run dev
 |---|---|
 | `npm run dev` | Vite (hot reload) + Electron |
 | `npm run dev:server` | API + Vite only, open `http://127.0.0.1:5173` in a browser |
-| `npm test` | Unit and API tests (584 tests, no internet needed) |
-| `npm run test:e2e` | Launches the real app and checks the UI (232 tests, needs internet) |
-| `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed (11 tests) |
+| `npm test` | Unit and API tests (633 tests, no internet needed) |
+| `npm run test:e2e` | Launches the real app and checks the UI (241 tests, needs internet) |
+| `npm run test:update` | Builds the installer, then checks auto-update and "Update now" in the packaged app against a local test feed, and closing and quitting with the tray and the desktop widget (21 tests) |
 | `npm run lint` | ESLint and type-check |
 | `npm run bench` | Cache hit rate and response times |
 | `npm run dist` | Builds the Windows installer |
@@ -120,6 +121,23 @@ There are no secrets anywhere. Copy `.env.example` to `.env` only if you want to
 - **A cache changes what "refresh" means.** Weather is cached for 10 minutes, so a 5-minute refresh would have been answered from the cache. The refresh and the Refresh button now ask the server to skip the cache, and the answer still refills it.
 - **"Loading" and "showing" are two different cities.** When a city failed to load, the next redraw put the new city's name over the old city's weather and clock, and the star saved the wrong city. The app now keeps track of the city being loaded and the city on screen separately.
 
+## Desktop widget
+
+| ![Small widget, Wallpaper background](docs/widget-small.png) | ![Medium widget, Wallpaper background](docs/widget-medium.png) |
+|:---:|:---:|
+| Small | Medium |
+
+<sub>Wallpaper mode over a made-up test picture used as the wallpaper, with staged weather (partly cloudy, then rain). Live mode cannot be captured: the widget hides itself from screenshots while Live is on.</sub>
+
+- **Turn it on** in **Settings > Widget**. It appears at the top right of the main screen without taking focus, and stays while the app runs, also when the window is hidden in the tray. It closes when the app quits. There is one widget.
+- **Move it** by dragging any part of it; the place is remembered (in `widget-state.json`), and if that place is no longer on a screen it goes back to the top right. **Right-click** opens a menu with **Open Weather Dashboard** and **Close widget**.
+- **Size:** **Small** (about 170×170: city, temperature and condition) or **Medium** (about 360×170: the same plus the next four hours and the day's rain chance).
+- **Keep on top:** off by default, so other windows cover it; on, it floats above them.
+- It shows the same city and weather as the tray icon: Your location if it is on, else your first favorite, else the last city you viewed. It needs no extra requests.
+- **Background:** the card is dark frosted glass whose colour follows the weather and the time of day. Behind it is either **Wallpaper**, your desktop picture blurred and cut to where the widget sits (checked again when you move the widget and every 30 seconds), or **Live**, a blurred view of whatever is behind the widget, captured about once a second (less often when nothing changes, not at all while the widget is hidden or the PC is locked). If the picture behind the widget is not certain (a slideshow, Spotlight, a plain colour, a different picture per monitor, an unreadable file, a black frame) it shows the plain dark card instead of a wrong picture.
+- **Contrast:** the dark tint is 49 % opaque, so shapes of the picture behind it stay visible, and the text has a soft shadow. It follows the main app's rule, checked by an offline test for every weather and time of day: main text and numbers at least 4.5:1 over a mid-grey and a dark desktop (lowest 7.3:1 and 14.7:1) and 3:1 over white (lowest 3.07:1); secondary text and icons at least 3:1 over grey and dark (lowest 3.17:1, the rain-drop icon over grey). Over large pure-white areas the main text is not guaranteed 4.5:1.
+- **Weather effects** (on by default): drifting clouds when it is cloudy, rain with splashes and drops that gather on the boxes when it rains, and a sun glow on sunny days. Snow and clear nights have none. They run at up to 30 frames a second, stop while the widget is hidden, and show a still picture when Windows is set to reduce animations.
+
 ## ⚙️ Settings panel
 
 The gear in the title bar opens a liquid-glass panel that covers the whole window: the dashboard behind it is blurred and darkened, so its text cannot be read through the panel. In the glass look the app name and the search box are hidden while it is open. `Esc`, the close button (in the gear's spot) or the gear itself closes it, and keyboard focus stays inside while it is open. Its content scrolls when the window is short. With "reduce animations" on in Windows it fades instead of sliding. Since 1.5.1 it shows only section titles and controls, plus the lines that say where things stand (updates, location); the longer explanations are still read out by screen readers.
@@ -129,12 +147,13 @@ The gear in the title bar opens a liquid-glass panel that covers the whole windo
 | **Updates** | Always first. The installed version and the state: "Version 1.5.1 · Up to date · checked 10:42" after a check that found nothing newer (the time follows the 12/24-hour setting), "Version X is downloading…", or "Version X is ready" with **Update now**. It asks "Restart now?" first; **Later** or `Esc` changes nothing, and the update still installs when the app quits (**Exit**, or **Quit** in the tray; closing a window that keeps running in the tray is not quitting). Before the first check, in a build that does not update itself, or after a failed check ("Couldn't check for updates") it shows only the version, never "Up to date". **Check for updates** is there when the app can update itself (before the first check, up to date, or after a failed check); it says "Checking…" while it runs, and a second press within 30 seconds is ignored |
 | **Look** | **Classic** or **Glass**, applied at once. Classic is an opaque dark page whose colour follows the weather and the time of day; Glass is Windows' acrylic glass. Glass is disabled where Windows cannot draw it (older than Windows 11 22H2, "Transparency effects" off, high contrast or reduced transparency); the **i** button next to it says "Glass needs Windows 11 22H2 or newer with Transparency effects on." If glass becomes possible later (for example, transparency effects turned back on), a saved Glass choice applies without a restart |
 | **Background** | **When I close the window**: **Ask** (default), **Keep running** or **Exit**. Ask shows "Close Weather Dashboard?" with **Keep running** and **Exit** and a **Remember my choice** box; `Esc` keeps the window open. Keep running hides the window and the app stays in the tray (left click or **Open Weather Dashboard** brings it back; **Quit** ends it). Exit quits as before 1.9. **Start with Windows**: a switch that shows what Windows says right now (it is read again each time Settings opens, since you can also change it in Windows Settings > Apps > Startup); started this way, the app opens hidden in the tray. It works only in the installed app; elsewhere it is off and disabled, and its **i** button says why. **Rain alerts**: off until you turn it on; **Send a test** shows a test notification. Its **i** button says which city is used and that Windows can block notifications |
+| **Widget** | **Widget** switch (off by default) adds the [desktop widget](#desktop-widget). **Size**: **Small** or **Medium**. **Keep on top**: a switch, off by default. **Background**: **Wallpaper** (default) or **Live**; its **i** button says what each reads and that nothing is saved or sent. **Weather effects**: a switch, on by default; its **i** button says what it draws and that it costs some power. The last four rows are disabled while the widget is off. **Close widget** in the widget's right-click menu turns the switch off |
 | **Units** | Temperature °C / °F, wind speed km/h / mph / m/s |
 | **Time format** | 12-hour or 24-hour, shown with examples from the current time (for example "12-hour (4:00 PM)" and "24-hour (16:00)"); used by the live clock, hourly strip, chart labels, sunrise and sunset, and the rain line |
 | **Temperature chart** | Time labels under the temperature chart: every 3 hours (default), every 2 hours, or every hour. A narrow card shows fewer, evenly spaced |
 | **Location** | **Use my location** switch. It is off until you answer the card in the sidebar. On: the app asks GeoJS for your city (by IP address, at each start) and says "Near Paris, France. This is approximate."; if it cannot, "Couldn't find your location. It tries again the next time the app starts." Off: no lookup is made and the stored place is deleted. The section says what is sent: "Uses your IP address, sent to GeoJS." The **i** button next to the switch opens "How your IP address is used", the same text as under [Privacy](#privacy); `Esc` or a click outside closes it and leaves Settings open |
 
-Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). The look is decided once, the first time 1.7 reads the file, and saved straight away: no file (a new install) gives Classic, a file without the field (an update from 1.6 or older) gives Glass. Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. Later releases add their own sections (widget) the same way. The close choice and rain alerts are saved like the other settings (files from 1.7.1 and older load with Ask and alerts off); Start with Windows is not saved by the app at all, because Windows' own startup entry is the only record. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
+Settings are saved in the local JSON file and checked by the server; older files without the new fields load with the defaults (12-hour, km/h, every 3 hours, location not answered yet, so nothing is looked up). The look is decided once, the first time 1.7 reads the file, and saved straight away: no file (a new install) gives Classic, a file without the field (an update from 1.6 or older) gives Glass. Sections are plain data in `SETTINGS_SECTIONS` (`src/renderer/components/settings.ts`), built with `settingsRow` and `segmentedControl`. The Widget section (2.0) is built the same way; files from 1.9.0 and older load with the widget off. The close choice and rain alerts are saved like the other settings (files from 1.7.1 and older load with Ask and alerts off); Start with Windows is not saved by the app at all, because Windows' own startup entry is the only record. The Updates section is built with the same helpers in `src/renderer/components/updateNote.ts` and is added at the top. It only displays the state the main process sends it (`src/main/updateTracker.ts`); the page cannot set it. Every time on screen goes through one function, `formatTime` in `src/shared/time.ts`.
 
 ## 🏗️ How it was built
 
@@ -211,6 +230,9 @@ Electron main process
 - Running in the background (1.9) adds no new service. The tray temperature and the rain alerts use the same Open-Meteo forecast request the window makes, through the same 10-minute cache, for one city: Your location if it is on, else your first favorite, else the last city you viewed. The IP-based lookup is still made only while "Use my location" is on.
 - Rain alerts are Windows notifications made on this PC; nothing is sent anywhere to show them. They are off until you turn them on.
 - **Start with Windows** adds the app to Windows' own list of startup apps (for your user only), with one argument that makes it start hidden in the tray. Turning it off removes the entry. The app keeps no copy of this setting.
+- The desktop widget (2.0) adds no new service and no new request: it shows the weather the tray already has.
+- In **Wallpaper** mode the widget reads your wallpaper file on this PC (the settings come from Windows' registry). The picture is kept in memory only, blurred, and never saved, logged or sent anywhere.
+- In **Live** mode the widget captures the part of the screen behind it about once a second, at low resolution. The frames stay in memory, are blurred, and are never saved or sent. While Live is on, the widget hides itself from screenshots and screen sharing, so it never captures itself.
 
 The text below is the same one the **i** button next to "Use my location" shows in Settings (a test checks that they match each other and the code):
 
@@ -245,6 +267,11 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 - **Notifications depend on Windows:** rain alerts show only if Windows allows notifications for the app and Do not disturb / Focus Assist is off.
 - **Rain timing is hourly:** the forecast gives rain per hour (Open-Meteo's 15-minute data is only real for North America and Central Europe), so an alert names the hour the rain is expected, for example "Rain expected around 4 PM", not the minute. It can only be as right as the forecast.
 - **Updates while running in the background:** a downloaded update installs when the app quits. If the window only hides when you close it, the update installs through **Update now** in Settings, or when you choose **Quit** in the tray (or **Exit**).
+- **The widget is not a window you work in:** it floats above other windows only with **Keep on top**, and showing the desktop (Win+D) may hide it.
+- **Live costs more:** Live uses more power than Wallpaper, and while it is on the widget is hidden from screenshots and screen sharing.
+- **HDR can change colours:** with HDR on, Windows can change the colours of captured frames, so the Live background can look lighter or paler.
+- **Some wallpapers show the plain card:** a slideshow, Spotlight and a different picture per monitor fall back to the plain dark card.
+- **One widget only,** and it disappears when the app quits.
 
 ## 🗺️ Roadmap
 
@@ -359,16 +386,15 @@ Charts by [Chart.js](https://www.chartjs.org/) (MIT); app shell by [Electron](ht
 #### v1.9 (Fixes)
 
 ### v2.0 - Desktop widget
-- [ ] Desktop widget: an option in the app to add a weather widget to the Windows desktop
-- [ ] Weather effects on the widget background: clouds when cloudy, raindrops with splashes when raining (drops also gather on the boxes), sun glow when sunny
-- [ ] Option for a fully transparent widget background (no system blur)
+- [x] Desktop widget: an option in the app to add a weather widget to the Windows desktop
+- [x] Widget background is blurred so text stays readable: your wallpaper blurred, or a live blur of what is behind it
+- [x] Weather effects on the widget background: clouds when cloudy, raindrops with splashes when raining (drops also gather on the boxes), sun glow when sunny
 
 #### v2.0 (Fixes)
-
-### v2.1 - History
-- [ ] Optional long-term history (SQLite, still local)
-
-#### v2.1 (Fixes)
+- [x] Weather code 97 showed "Unknown"; it now says "Thunderstorm"
+- [x] The location test's purple contrast check used live weather; it now uses staged weather, so it no longer fails on light-weather days
+- [x] The current-time dot test was flaky: it read the dot while the chart was still animating; it now waits until the point stops moving
+- [x] The "Current time" legend test also found the rain legend; it now reads the temperature legend
 
 ### Later
 - [ ] More themes (still an idea)

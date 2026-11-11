@@ -99,6 +99,7 @@ describe('Settings > Look', () => {
       'Updates',
       'Look',
       'Background',
+      'Widget',
       'Units',
       'Time format',
       'Temperature chart',

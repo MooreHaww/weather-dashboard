@@ -27,9 +27,9 @@ function backdropUrl(kind: Backdrop): string {
   return `data:text/html,${encodeURIComponent(`<html><body style="margin:0;height:100vh;overflow:hidden;background:${bg}">${text}</body></html>`)}`;
 }
 
-// Main-process code: the app's window is the one not marked as a backdrop.
+// Main-process code: the app's window is the one not marked as a backdrop (and not the v2.0 desktop widget).
 const MAIN = `const { BrowserWindow, desktopCapturer, screen } = process.mainModule.require('electron');
-  const wins = BrowserWindow.getAllWindows(); const win = wins.find((w) => !w.__backdrop);`;
+  const wins = BrowserWindow.getAllWindows(); const win = wins.find((w) => !w.__backdrop && !w.webContents.getURL().includes('/widget.html'));`;
 
 /** Show (or change) the backdrop window over the app's whole screen, behind the app, and bring the app to the front. */
 export async function showBackdrop(app: LaunchedApp, kind: Backdrop): Promise<void> {

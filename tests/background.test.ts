@@ -27,14 +27,14 @@ const file = () => path.join(dir, 'weather-dashboard.json');
 
 describe('settings: closeBehavior and rainAlerts', () => {
   it('defaults: ask, and rain alerts off', () => {
-    expect(defaultSettings()).toMatchObject({ closeBehavior: 'ask', rainAlerts: false });
+    expect(defaultSettings()).toMatchObject({ closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true });
   });
 
   it('a 1.7.1 file loads with every saved value unchanged, the new fields at their defaults, and is not rewritten', async () => {
     await copyFile(FIXTURE, file());
     const before = await readFile(file(), 'utf8');
     const saved = JSON.parse(before) as AppState & { version: 1 };
-    const expected: Record<string, unknown> = { ...saved, settings: { ...saved.settings, closeBehavior: 'ask', rainAlerts: false } };
+    const expected: Record<string, unknown> = { ...saved, settings: { ...saved.settings, closeBehavior: 'ask', rainAlerts: false, widget: false, widgetSize: 'small', widgetOnTop: false, widgetBackground: 'wallpaper', widgetEffects: true } };
     delete expected.version;
     expect(await new Storage(dir).get()).toEqual(expected);
     expect(await readFile(file(), 'utf8')).toBe(before); // reading changes nothing on disk

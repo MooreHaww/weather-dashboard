@@ -11,6 +11,8 @@ import {
   LOCATION_SETTINGS,
   TEMP_LABELS,
   TIME_FORMATS,
+  WIDGET_BACKGROUNDS,
+  WIDGET_SIZES,
   WIND_UNITS,
   type AppState,
   type Place,
@@ -36,6 +38,11 @@ export function defaultSettings(): Settings {
     appearance: 'classic',
     closeBehavior: 'ask',
     rainAlerts: false,
+    widget: false,
+    widgetSize: 'small',
+    widgetOnTop: false,
+    widgetBackground: 'wallpaper',
+    widgetEffects: true,
   };
 }
 
@@ -55,6 +62,11 @@ export function validSettings(raw: unknown): Partial<Settings> {
   if (APPEARANCES.includes(o.appearance as never)) out.appearance = o.appearance as Settings['appearance'];
   if (CLOSE_BEHAVIORS.includes(o.closeBehavior as never)) out.closeBehavior = o.closeBehavior as Settings['closeBehavior'];
   if (typeof o.rainAlerts === 'boolean') out.rainAlerts = o.rainAlerts;
+  if (typeof o.widget === 'boolean') out.widget = o.widget;
+  if (WIDGET_SIZES.includes(o.widgetSize as never)) out.widgetSize = o.widgetSize as Settings['widgetSize'];
+  if (typeof o.widgetOnTop === 'boolean') out.widgetOnTop = o.widgetOnTop;
+  if (WIDGET_BACKGROUNDS.includes(o.widgetBackground as never)) out.widgetBackground = o.widgetBackground as Settings['widgetBackground'];
+  if (typeof o.widgetEffects === 'boolean') out.widgetEffects = o.widgetEffects;
   return out;
 }
 

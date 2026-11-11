@@ -67,9 +67,10 @@ describe('the glass sky state from the weather code and is_day', () => {
     }
   });
 
-  it('97 "Heavy thunderstorm" is the one listed code describeWeather does not know; it is a storm here', () => {
+  it('every listed code has a label; 97 "Heavy thunderstorm" is labelled "Thunderstorm" (2.0) and is a storm here', () => {
     const unknown = OPEN_METEO_CODES.filter((c) => describeWeather(c).label === 'Unknown');
-    expect(unknown).toEqual([97]);
+    expect(unknown).toEqual([]);
+    expect(describeWeather(97)).toMatchObject({ label: 'Thunderstorm', icon: 'thunder' });
     expect(skyOf(97)).toBe('storm');
   });
 
